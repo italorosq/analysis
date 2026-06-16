@@ -1,26 +1,46 @@
-# 1. specify base image
-FROM python:3.12.9-slim-bookworm
+# Multi-stage build for production
+FROM python:3.12-slim-bookworm AS builder
 
-# 2. define (and create) working directory
 WORKDIR /app
 
-# 3. copy requirements.txt  (for caching sake)
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install
 COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# 4. upgrade pip (so it keep working in the future)
-RUN pip install --root-user-action=ignore --upgrade pip
+# Production stage
+FROM python:3.12-slim-bookworm
 
-# 5. install python packages
-RUN pip install --root-user-action=ignore -r requirements.txt 
+WORKDIR /app
 
-# 6. copy app files
-COPY . .
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-# 7. expose port 8140 for application server
-EXPOSE 8140
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
-# ?. creating an anonymous persistence as a fallback, just in case ...
-VOLUME ./persistence
+# Copy application code
+COPY --chown=appuser:appuser . .
 
-# 8. define entrypoint command to start the application-server
-ENTRYPOINT [ "gunicorn", "wsgi:app" ]
+# Create data directories
+RUN mkdir -p /app/data/motor_result /app/data/data_treatment && \
+    chown -R appuser:appuser /app/data
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/serra-rocketry/')" || exit 1
+
+# Run with gunicorn
+ENTRYPOINT ["gunicorn", "wsgi:app", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120"]

@@ -1,80 +1,81 @@
-{% extends "base.html" %} {% block content %}
-<div class="container">
-  <div class="card">
-    <h2>Página de análises.</h2>
+{% extends "base.html" %} 
+{% block page_title %}Análise de Motor{% endblock %}
+{% block content %}
+<div class="page-container">
+  <div class="page-header">
+    <h2>Análise de Teste Estático</h2>
+    <p>Faça upload do arquivo CSV gerado pelo thrust stand para calcular impulso, empuxo e classe do motor</p>
   </div>
-  <div class="card">
-    <form
-      method="POST"
-      action="{{ url_for('page.upload_motor') }}"
-      enctype="multipart/form-data"
-      id="upload-form"
-    >
-      <input
-        type="file"
-        name="file"
-        id="file"
-        accept=".txt,.csv"
-        style="display: none"
-      />
-      <div class="drop-area">
-        <div id="drop-area">
-          <h3>Arraste e solte o arquivo aqui ou clique para selecionar</h3>
-        </div>
-        <div id="file-confirmation" style="display: none;">
-          <p>Arquivo recebido: <span id="file-name"></span></p>
-        </div>
+
+  <div class="upload-card card">
+    <form method="POST" action="{{ url_for('page.upload_motor') }}" enctype="multipart/form-data" id="upload-form">
+      <input type="file" name="file" id="file" accept=".csv,.txt" style="display: none" />
+      <div class="drop-area" id="drop-area">
+        <div class="drop-icon">📁</div>
+        <h3>Arraste e solte o arquivo aqui ou clique para selecionar</h3>
+        <p class="drop-hint">Formatos aceitos: .csv, .txt (máx. 16MB)</p>
       </div>
-      <input type="submit" value="Upload" id="upload-button" disabled />
+      <div id="file-confirmation" class="file-confirmation" style="display: none;">
+        <p>Arquivo selecionado: <span id="file-name"></span></p>
+      </div>
+      <button type="submit" id="upload-button" class="btn btn-primary" disabled>Processar Análise</button>
     </form>
+  </div>
 
-    <script>
-      const dropArea = document.getElementById("drop-area");
-      const fileInput = document.getElementById("file");
-      const fileConfirmation = document.getElementById("file-confirmation");
-      const fileNameSpan = document.getElementById("file-name");
-      const uploadButton = document.getElementById("upload-button");
+  <div class="confirm card" style="display: {{ displayopt }};">
+    <div class="flash flash-success">{{ msg }}</div>
+  </div>
 
-      dropArea.addEventListener("click", () => fileInput.click());
+  <script>
+    const dropArea = document.getElementById("drop-area");
+    const fileInput = document.getElementById("file");
+    const fileConfirmation = document.getElementById("file-confirmation");
+    const fileNameSpan = document.getElementById("file-name");
+    const uploadButton = document.getElementById("upload-button");
 
-      dropArea.addEventListener("dragover", (event) => {
-        event.preventDefault();
-        dropArea.classList.add("dragover");
-      });
+    dropArea.addEventListener("click", () => fileInput.click());
 
-      dropArea.addEventListener("dragleave", () => {
-        dropArea.classList.remove("dragover");
-      });
+    dropArea.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      dropArea.classList.add("dragover");
+    });
 
-      dropArea.addEventListener("drop", (event) => {
-        event.preventDefault();
-        dropArea.classList.remove("dragover");
-        const files = event.dataTransfer.files;
+    dropArea.addEventListener("dragleave", () => {
+      dropArea.classList.remove("dragover");
+    });
+
+    dropArea.addEventListener("drop", (event) => {
+      event.preventDefault();
+      dropArea.classList.remove("dragover");
+      const files = event.dataTransfer.files;
+      if (files.length > 0) {
         fileInput.files = files;
-        const dataTransfer = new DataTransfer();
-        for (let i = 0; i < files.length; i++) {
-          dataTransfer.items.add(files[i]);
-        }
-        fileInput.files = dataTransfer.files;
         showFileConfirmation(files[0]);
-      });
-
-      fileInput.addEventListener("change", (event) => {
-        const files = event.target.files;
-        if (files.length > 0) {
-          showFileConfirmation(files[0]);
-        }
-      });
-
-      function showFileConfirmation(file) {
-        fileNameSpan.textContent = file.name;
-        fileConfirmation.style.display = "block";
-        uploadButton.disabled = false;
       }
-    </script>
-  </div>
-  <div class="confirm card" , style="display: {{displayopt}};">
-    <h2>{{msg}}</h2>
-  </div>
+    });
+
+    fileInput.addEventListener("change", (event) => {
+      const files = event.target.files;
+      if (files.length > 0) {
+        showFileConfirmation(files[0]);
+      }
+    });
+
+    function showFileConfirmation(file) {
+      if (!file.name.match(/\.(csv|txt)$/i)) {
+        alert('Formato inválido! Use .csv ou .txt');
+        fileInput.value = '';
+        return;
+      }
+      if (file.size > 16 * 1024 * 1024) {
+        alert('Arquivo muito grande! Máximo 16MB');
+        fileInput.value = '';
+        return;
+      }
+      fileNameSpan.textContent = file.name;
+      fileConfirmation.style.display = "block";
+      uploadButton.disabled = false;
+    }
+  </script>
 </div>
 {% endblock %}

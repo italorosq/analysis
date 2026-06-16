@@ -1,7 +1,48 @@
-{% extends "base.html" %} {% block content %}
-<div class="container">
-  <div class="card">
-    <h2>Página de análises da equipe.</h2>
+{% extends "base.html" %} 
+{% block page_title %}Dashboard{% endblock %}
+{% block content %}
+<div class="dashboard">
+  <div class="hero-section">
+    <h1>Bem-vindo ao Serra Rocketry</h1>
+    <p class="subtitle">Sistema de Análise de Testes Estáticos de Motores</p>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon">📊</div>
+      <h3>Análise de Motor</h3>
+      <p>Upload de dados de teste estático, cálculo de impulso, empuxo e classe do motor</p>
+      <a href="{{ url_for('page.analise') }}" class="btn btn-primary">Iniciar Análise</a>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🔧</div>
+      <h3>Tratamento de Dados</h3>
+      <p>Filtragem interativa de dados brutos com thresholds ajustáveis e visualização em tempo real</p>
+      <a href="{{ url_for('page.tratamento') }}" class="btn btn-primary">Tratar Dados</a>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📁</div>
+      <h3>Dados Salvos</h3>
+      <p>Gerenciamento de resultados: CSV, gráficos PNG e relatórios PDF</p>
+      <a href="#" class="btn btn-secondary" onclick="alert('Em desenvolvimento')">Ver Arquivos</a>
+    </div>
+  </div>
+
+  <div class="info-section">
+    <h2>Formato de Dados Suportado</h2>
+    <div class="format-info">
+      <pre><code>Tempo,Empuxo,Pressao
+0,0.001,0.0
+10,0.002,0.1
+20,0.005,0.3
+...</code></pre>
+      <ul>
+        <li><strong>Tempo:</strong> Milissegundos desde o início do teste (inteiro)</li>
+        <li><strong>Empuxo:</strong> Massa medida pela célula de carga em kg (decimal)</li>
+        <li><strong>Pressao:</strong> Pressão da câmara em MPa (decimal)</li>
+      </ul>
+      <p class="note">Gerado automaticamente pelo firmware do thrust stand (ESP32 + HX711 + sensor de pressão)</p>
+    </div>
   </div>
 </div>
 {% endblock %}

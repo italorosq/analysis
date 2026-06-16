@@ -1,0 +1,31 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# E402: imports após sys.path são intencionais no cli.py (já marcados com noqa)
+ignore = ["E402"]
+
+[tool.pylint.main]
+ignore = ["tests"]
+
+[tool.pylint.format]
+max-line-length = 100
+
+[tool.pylint."messages control"]
+disable = [
+    "C0114",  # missing-module-docstring
+    "C0115",  # missing-class-docstring
+    "C0116",  # missing-function-docstring
+    "C0103",  # invalid-name (motor_analisys, data_treatment seguem convenção do projeto)
+    "C0415",  # import-outside-toplevel (imports lazy de matplotlib/reportlab/pandas são intencionais)
+    "E0401",  # import-error (flask resolvido em runtime/venv)
+    "W0613",  # unused-argument (handlers de erro Flask recebem 'e')
+    "W0718",  # broad-exception-caught (rotas web capturam tudo p/ mensagem amigável)
+    "W0621",  # redefined-outer-name (app factory)
+    "R0914",  # too-many-locals
+    "R0915",  # too-many-statements
+    "R0913",  # too-many-arguments
+    "R0917",  # too-many-positional-arguments
+    "R0903",  # too-few-public-methods
+]

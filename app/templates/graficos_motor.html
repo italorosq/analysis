@@ -2,59 +2,96 @@
 <div class="container">
   <div class="analisys">
     <div class="graph_card card">
-      <canvas id="myChart"></canvas>
+      <canvas id="thrustChart"></canvas>
+    </div>
+    <div class="graph_card card">
+      <canvas id="pressureChart"></canvas>
     </div>
     <script>
-      const chartLabels = {{x}};
-
-      const data = {
-          labels: chartLabels,
-          datasets: [{
-              label: 'Empuxo do Motor',
-              backgroundColor: '#002196',
-              borderColor: '#002196',
-              data: {{y}}
-          }]
+      // Thrust chart
+      const thrustLabels = {{x|safe}};
+      const thrustData = {
+        labels: thrustLabels,
+        datasets: [{
+          label: 'Empuxo do Motor (N)',
+          backgroundColor: 'rgba(0, 33, 150, 0.1)',
+          borderColor: '#002196',
+          borderWidth: 2,
+          data: {{y|safe}},
+          fill: true,
+          tension: 0.3
+        }]
       };
 
-      const config = {
-          type: 'line',
-          data: data,
-          options: { maintainAspectRatio:false,
-            scales: {
-                x: {
-                  ticks: {
-                    color: '#000423'
-                  },
-                  title: {
-                    display: true,
-                    align: 'center',
-                    text: 'Tempo de Operação [s]',
-                    color: '#000423'
-                  }
-                },
-                y: {
-                  ticks: {
-                    color: '#000423'
-                  },
-                  title: {
-                    display: true,
-                    align: 'center',
-                    text: 'Empuxo [N]',
-                    color: '#000423'
-                  }
-                }
-              }
+      const thrustConfig = {
+        type: 'line',
+        data: thrustData,
+        options: {
+          maintainAspectRatio: false,
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: true, position: 'top' },
+            tooltip: { mode: 'index', intersect: false }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#000423' },
+              title: { display: true, align: 'center', text: 'Tempo de Operação [s]', color: '#000423' }
+            },
+            y: {
+              ticks: { color: '#000423' },
+              title: { display: true, align: 'center', text: 'Empuxo [N]', color: '#000423' }
             }
+          }
+        }
       };
 
-      const myChart = new Chart(
-          document.getElementById('myChart'),
-          config
-      );
+      const thrustChart = new Chart(document.getElementById('thrustChart'), thrustConfig);
+
+      // Pressure chart
+      const pressureLabels = {{x|safe}};
+      const pressureData = {
+        labels: pressureLabels,
+        datasets: [{
+          label: 'Pressão da Câmara (MPa)',
+          backgroundColor: 'rgba(0, 100, 200, 0.1)',
+          borderColor: '#0064C8',
+          borderWidth: 2,
+          data: {{y_pressure|safe}},
+          fill: true,
+          tension: 0.3
+        }]
+      };
+
+      const pressureConfig = {
+        type: 'line',
+        data: pressureData,
+        options: {
+          maintainAspectRatio: false,
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: true, position: 'top' },
+            tooltip: { mode: 'index', intersect: false }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#000423' },
+              title: { display: true, align: 'center', text: 'Tempo de Operação [s]', color: '#000423' }
+            },
+            y: {
+              ticks: { color: '#000423' },
+              title: { display: true, align: 'center', text: 'Pressão [MPa]', color: '#000423' }
+            }
+          }
+        }
+      };
+
+      const pressureChart = new Chart(document.getElementById('pressureChart'), pressureConfig);
     </script>
     <div class="info_card">
-      <div class="card" id="table" , style="height: 70%">
+      <div class="card" id="table" style="height: 70%">
         <table>
           <thead>
             <tr>
@@ -74,14 +111,9 @@
       </div>
       <div class="card save" style="height: 30%">
         <h2>Salvar análise</h2>
-        <!-- <form action="/save_motor" method="POST">
-          <label for="name">Informe o nome do motor:</label>
-          <input type="text" name="name" id="name" />
-          <input type="submit" value="Salvar" />
-        </form> -->
         <form action="{{ url_for('page.save_motor') }}" method="POST">
-          <label for="name">Informe o nome do motor:</label>
-          <input type="text" name="name" id="name" />
+          <label for="name">Nome do motor:</label>
+          <input type="text" name="name" id="name" placeholder="Ex: SR1500_Nozzle_Aco" required />
           <input type="submit" value="Salvar" />
         </form>
       </div>

@@ -1,35 +1,65 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Serra Rocketry</title>
-    <link
-      href="{{url_for('page.static', filename = 'css/app.css')}}"
-      rel="stylesheet"
-    />
-    <link rel="icon" type="image/x-icon" href="static/assets/favicon.ico" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  </head>
-  <body>
-    <div class="sidebar">
-      <div class="logo-div">
-        <!-- <img src="static/assets/LOGO - SEM TEXTO.png" alt="" class="logo" /> -->
-        <!-- {{ url_for('page.static', filename = 'js/jquery-3.7.1.js') }} -->
-        <img src="{{ url_for('page.static', filename = 'assets/LOGO - SEM TEXTO.png') }}" alt="" class="logo" />
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Serra Rocketry{% endblock %}</title>
+  <link href="{{ url_for('page.static', filename='css/app.css') }}" rel="stylesheet" />
+  <link rel="icon" type="image/x-icon" href="{{ url_for('page.static', filename='assets/favicon.ico') }}" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="app-wrapper">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <img src="{{ url_for('page.static', filename='assets/LOGO - SEM TEXTO.png') }}" alt="Serra Rocketry Logo" class="logo" />
         <h1>Serra Rocketry</h1>
+        <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+        </button>
       </div>
-      <div class="menu-list">
-        <!-- <a href="/home"><h2>Home</h2></a> -->
-        <a href="{{ url_for('page.index') }}" ><h2>Home</h2></a>
-        <!-- <a href="/analises"><h2>Análises de Dados</h2></a> -->
-        <a href="{{ url_for('page.analise') }}" ><h2>Análises de Dados</h2></a>
-        <!-- <a href="/tratamento"><h2>Tratamento de Dados</h2></a> -->
-        <a href="{{ url_for('page.galeria') }}" ><h2>Tratamento de Dados</h2></a>
+      <nav class="sidebar-nav" id="sidebarNav">
+        <ul class="menu-list">
+          <li><a href="{{ url_for('page.index') }}"><span class="icon">🏠</span> Home</a</span>Home</a></li>
+          <li><a href="{{ url_for('page.analise') }}"><span class="icon">📊</span> Análises</a></li>
+          <li><a href="{{ url_for('page.tratamento') }}"><span class="icon">🔧</span> Tratamento</a></li>
+        </ul>
+      </nav>
+      <div class="sidebar-footer">
+        <small>Equipe Serra Rocketry &copy; {{ current_year }}</small>
       </div>
-    </div>
-    {% block content %} {% endblock %}
-    <script src="{{ url_for('page.static', filename = 'js/jquery-3.7.1.js') }}"></script>
-    <script src="{{ url_for('page.static', filename = 'js/app.js') }}"></script>
-  </body>
+    </aside>
+
+    <main class="main-content" id="mainContent">
+      <header class="top-bar">
+        <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open menu">
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+        </button>
+        <h2 class="page-title">{% block page_title %}{% endblock %}</h2>
+      </header>
+      <div class="content-area">
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="flash-messages">
+              {% for message in messages %}
+                <div class="flash flash-info">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+
+    <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
+  </div>
+
+  <script src="{{ url_for('page.static', filename='js/jquery-3.7.1.js') }}"></script>
+  <script src="{{ url_for('page.static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
 </html>

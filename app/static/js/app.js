@@ -1,15 +1,75 @@
-$(document).ready(function () {
-  // Toggle do menu hamburger
-  $(".humbarger").click(function (event) {
-    $(".menu-list").slideToggle(500); // Alterna o menu com animação
-    event.preventDefault();
+// Serra Rocketry - navegação e UI
+document.addEventListener("DOMContentLoaded", function () {
+  const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("sidebarOverlay");
+  const hamburger = document.getElementById("hamburger");
+  const mobileBtn = document.getElementById("mobileMenuBtn");
+  const wrapper = document.querySelector(".app-wrapper");
+
+  function openSidebar() {
+    if (sidebar) sidebar.classList.add("sidebar-open");
+    if (wrapper) wrapper.classList.add("sidebar-open");
+    if (overlay) overlay.classList.add("visible");
+    [hamburger, mobileBtn].forEach((b) => {
+      if (b) b.setAttribute("aria-expanded", "true");
+    });
+  }
+
+  function closeSidebar() {
+    if (sidebar) sidebar.classList.remove("sidebar-open");
+    if (wrapper) wrapper.classList.remove("sidebar-open");
+    if (overlay) overlay.classList.remove("visible");
+    [hamburger, mobileBtn].forEach((b) => {
+      if (b) b.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function toggleSidebar(event) {
+    if (event) event.preventDefault();
+    const isOpen = sidebar && sidebar.classList.contains("sidebar-open");
+    if (isOpen) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  }
+
+  if (hamburger) hamburger.addEventListener("click", toggleSidebar);
+  if (mobileBtn) mobileBtn.addEventListener("click", toggleSidebar);
+  if (overlay) overlay.addEventListener("click", closeSidebar);
+
+  // Fecha o menu ao clicar num link (mobile)
+  const navLinks = document.querySelectorAll(".menu-list li a");
+  navLinks.forEach((link) => {
+    link.addEventListener("click", function () {
+      if (window.innerWidth <= 900) {
+        closeSidebar();
+      }
+    });
   });
 
-  // Fecha o menu quando um link é clicado (somente para telas pequenas)
-  $(".menu-list li a").click(function (event) {
-    if ($(window).width() < 768) {
-      $(".menu-list").slideUp(500); // Fecha o menu após clicar no link
+  // Marca o link ativo conforme a URL atual
+  const path = window.location.pathname;
+  navLinks.forEach((link) => {
+    const href = link.getAttribute("href");
+    if (href && href !== "#" && path.endsWith(href.replace(/\/$/, ""))) {
+      link.classList.add("active");
     }
   });
-});
+  // Fallback: se nenhum casou e estamos na raiz, marca Home (primeiro link)
+  if (!document.querySelector(".menu-list a.active") && navLinks.length) {
+    if (path === "/" || path.endsWith("/home") || path.endsWith("serra-rocketry/")) {
+      navLinks[0].classList.add("active");
+    }
+  }
 
+  // Auto-dismiss das mensagens flash
+  const flashes = document.querySelectorAll(".flash");
+  flashes.forEach((flash) => {
+    setTimeout(() => {
+      flash.style.transition = "opacity 0.5s ease";
+      flash.style.opacity = "0";
+      setTimeout(() => flash.remove(), 500);
+    }, 5000);
+  });
+});

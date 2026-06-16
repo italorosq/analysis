@@ -6,11 +6,14 @@
 <div class="container">
   <div class="analisys">
     <div class="graph_card card">
-      <canvas id="myChart"></canvas>
+      <canvas id="thrustChart"></canvas>
+    </div>
+    <div class="graph_card card">
+      <canvas id="pressureChart"></canvas>
     </div>
 
     <div class="info_card">
-      <div class="card" id="table" style="height: 70%">
+      <div class="card" id="table" style="height: 60%">
         <table>
           <thead>
             <tr>
@@ -20,10 +23,22 @@
           </thead>
           <tbody>
             {% for key, value in result.items() %}
+            {% if key == 'thrust' or key == 'pressure' %}
+            <tr style="background-color: #f0f0f0;">
+              <td class="t_info val" colspan="2"><strong>{{ key|capitalize }} Statistics</strong></td>
+            </tr>
+            {% for sub_key, sub_value in value.items() %}
+            <tr>
+              <td class="t_info val" style="padding-left: 20px;">{{ sub_key }}</td>
+              <td class="t_value val">{{ "%.4f"|format(sub_value) if sub_value is number else sub_value }}</td>
+            </tr>
+            {% endfor %}
+            {% else %}
             <tr>
               <td class="t_info val">{{ key }}</td>
-              <td class="t_value val">{{ value }}</td>
+              <td class="t_value val">{{ "%.4f"|format(value) if value is number else value }}</td>
             </tr>
+            {% endif %}
             {% endfor %}
           </tbody>
         </table>
@@ -31,21 +46,21 @@
 
       <div class="card">
         <div class="rangeslider">
+          <label>Threshold de Empuxo (N)</label>
           <div id="thresholdSlider"></div>
-          <p>Threshold: <span id="thresholdValue">{{threshold}}</span></p>
+          <p>Valor: <span id="thresholdValue">{{threshold}}</span> N</p>
+          
+          <label>Intervalo de Tempo (s)</label>
           <div id="intervalSlider"></div>
-          <p>Intervalo: <span id="intervalValue">{{tmin}} - {{tmax}}</span></p>
+          <p>Intervalo: <span id="intervalValue">{{tmin}} - {{tmax}}</span> s</p>
         </div>
       </div>
 
-      <div class="card save" style="height: 30%">
-        <h2>Salvar dados</h2>
-        <!-- <form action="/save_treatment" method="POST">
-          <label for="name">Salvar o arquivo processado?</label>
-          <input type="submit" value="Salvar" />
-        </form> -->
-        <form action="{{ url_for('page.save_motor') }}" method="POST">
-          <label for="name">Salvar o arquivo processado?</label>
+      <div class="card save">
+        <h2>Salvar dados processados</h2>
+        <form action="{{ url_for('page.save_treatment') }}" method="POST">
+          <label for="name">Nome do arquivo:</label>
+          <input type="text" name="name" id="name" placeholder="Ex: teste_estatico_001" required />
           <input type="submit" value="Salvar" />
         </form>
       </div>
@@ -54,73 +69,89 @@
 </div>
 
 <script>
-  const chartLabels = "{{x}}".split(",");
-  const data = {
-    labels: chartLabels,
-    datasets: [{
-      label: 'Empuxo do Motor',
-      backgroundColor: '#002196',
-      borderColor: '#002196',
-      data: "{{y}}".split(",")
-    }]
-  };
-
-  const config = {
+  // Thrust chart
+  const thrustLabels = {{x|safe}};
+  const thrustChart = new Chart(document.getElementById('thrustChart'), {
     type: 'line',
-    data: data,
+    data: {
+      labels: thrustLabels,
+      datasets: [{
+        label: 'Empuxo (N)',
+        backgroundColor: 'rgba(0, 33, 150, 0.1)',
+        borderColor: '#002196',
+        borderWidth: 2,
+        data: {{y|safe}},
+        fill: true,
+        tension: 0.3
+      }]
+    },
     options: {
       maintainAspectRatio: false,
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: true, position: 'top' } },
       scales: {
-        x: {
-          ticks: { color: '#000423' },
-          title: {
-            display: true,
-            align: 'center',
-            text: 'Tempo de Operação [s]',
-            color: '#000423'
-          }
-        },
-        y: {
-          ticks: { color: '#000423' },
-          title: {
-            display: true,
-            align: 'center',
-            text: 'Empuxo [N]',
-            color: '#000423'
-          }
-        }
+        x: { ticks: { color: '#000423' }, title: { display: true, text: 'Tempo [s]', color: '#000423' } },
+        y: { ticks: { color: '#000423' }, title: { display: true, text: 'Empuxo [N]', color: '#000423' } }
       }
     }
-  };
+  });
 
-  const myChart = new Chart(document.getElementById('myChart'), config);
+  // Pressure chart
+  const pressureChart = new Chart(document.getElementById('pressureChart'), {
+    type: 'line',
+    data: {
+      labels: thrustLabels,
+      datasets: [{
+        label: 'Pressão (MPa)',
+        backgroundColor: 'rgba(0, 100, 200, 0.1)',
+        borderColor: '#0064C8',
+        borderWidth: 2,
+        data: {{y_pressure|safe}},
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: true, position: 'top' } },
+      scales: {
+        x: { ticks: { color: '#000423' }, title: { display: true, text: 'Tempo [s]', color: '#000423' } },
+        y: { ticks: { color: '#000423' }, title: { display: true, text: 'Pressão [MPa]', color: '#000423' } }
+      }
+    }
+  });
 
+  // noUiSlider for threshold
   const thresholdSlider = document.getElementById('thresholdSlider');
   const thresholdValue = document.getElementById('thresholdValue');
-  const intervalSlider = document.getElementById('intervalSlider');
-  const intervalValue = document.getElementById('intervalValue');
-
   noUiSlider.create(thresholdSlider, {
     start: [{{threshold}}],
     connect: true,
-    step: 0.01,
-    range: { min: {{fmin}}, max: {{fmax}} }
+    step: 0.1,
+    range: { min: {{fmin}}, max: {{fmax}} },
+    format: { to: v => v.toFixed(1), from: v => parseFloat(v) }
   });
-
-  thresholdSlider.noUiSlider.on('change', function (values, handle) {
-    thresholdValue.innerHTML = values[handle];
+  thresholdSlider.noUiSlider.on('change', () => {
+    thresholdValue.innerHTML = thresholdSlider.noUiSlider.get();
     updateFilters();
   });
 
+  // noUiSlider for time interval
+  const intervalSlider = document.getElementById('intervalSlider');
+  const intervalValue = document.getElementById('intervalValue');
   noUiSlider.create(intervalSlider, {
     start: [{{tmin}}, {{tmax}}],
     connect: true,
-    step: 10,
-    range: { min: {{tmin}}, max: {{tmax}} }
+    step: 0.1,
+    range: { min: {{tmin}}, max: {{tmax}} },
+    format: { to: v => v.toFixed(1), from: v => parseFloat(v) }
   });
-
-  intervalSlider.noUiSlider.on('change', function (values, handle) {
-    intervalValue.innerHTML = values.join(' - ');
+  intervalSlider.noUiSlider.on('change', () => {
+    const vals = intervalSlider.noUiSlider.get();
+    intervalValue.innerHTML = vals.join(' - ');
     updateFilters();
   });
 
@@ -128,32 +159,66 @@
     const threshold = thresholdSlider.noUiSlider.get();
     const interval = intervalSlider.noUiSlider.get();
 
-    fetch('/update_filters', {
+    fetch('{{ url_for("page.update_filters") }}', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `threshold=${threshold}&tmin=${interval[0]}&tmax=${interval[1]}`
     })
     .then(response => response.json())
     .then(data => {
-      myChart.data.labels = data.x;
-      myChart.data.datasets[0].data = data.y;
-      myChart.update();
+      if (data.error) {
+        console.error('Filter error:', data.error);
+        return;
+      }
+      thrustChart.data.labels = data.x;
+      thrustChart.data.datasets[0].data = data.y;
+      thrustChart.update();
+
+      pressureChart.data.labels = data.x;
+      pressureChart.data.datasets[0].data = data.y_pressure;
+      pressureChart.update();
 
       const tableBody = document.querySelector('tbody');
       tableBody.innerHTML = '';
       for (const [key, value] of Object.entries(data.result)) {
-        const row = document.createElement('tr');
-        const keyCell = document.createElement('td');
-        keyCell.className = 't_info val';
-        keyCell.textContent = key;
-        const valueCell = document.createElement('td');
-        valueCell.className = 't_value val';
-        valueCell.textContent = value;
-        row.appendChild(keyCell);
-        row.appendChild(valueCell);
-        tableBody.appendChild(row);
+        if (key === 'thrust' || key === 'pressure') {
+          const headerRow = document.createElement('tr');
+          headerRow.style.backgroundColor = '#f0f0f0';
+          const headerCell = document.createElement('td');
+          headerCell.colSpan = 2;
+          headerCell.className = 't_info val';
+          headerCell.innerHTML = `<strong>${key.charAt(0).toUpperCase() + key.slice(1)} Statistics</strong>`;
+          headerRow.appendChild(headerCell);
+          tableBody.appendChild(headerRow);
+
+          for (const [subKey, subValue] of Object.entries(value)) {
+            const row = document.createElement('tr');
+            const keyCell = document.createElement('td');
+            keyCell.className = 't_info val';
+            keyCell.style.paddingLeft = '20px';
+            keyCell.textContent = subKey;
+            const valueCell = document.createElement('td');
+            valueCell.className = 't_value val';
+            valueCell.textContent = typeof subValue === 'number' ? subValue.toFixed(4) : subValue;
+            row.appendChild(keyCell);
+            row.appendChild(valueCell);
+            tableBody.appendChild(row);
+          }
+        } else {
+          const row = document.createElement('tr');
+          const keyCell = document.createElement('td');
+          keyCell.className = 't_info val';
+          keyCell.textContent = key;
+          const valueCell = document.createElement('td');
+          valueCell.className = 't_value val';
+          valueCell.textContent = typeof value === 'number' ? value.toFixed(4) : value;
+          row.appendChild(keyCell);
+          row.appendChild(valueCell);
+          tableBody.appendChild(row);
+        }
       }
-    });
+    })
+    .catch(err => console.error('Update filters failed:', err));
   }
 </script>
 {% endblock %}

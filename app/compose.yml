@@ -1,15 +1,20 @@
 services:
   serra-rocketry:
     container_name: serra-rocketry-compose
-    
     build: .
-
     ports:
-      - 8140:8140
-
+      - "5000:5000"
     volumes:
       - ./persistence:/app/persistence
-
+      - ./data:/app/data
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
     stdin_open: true
     tty: true
-    restart: always
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/serra-rocketry/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
