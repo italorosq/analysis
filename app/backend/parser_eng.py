@@ -19,9 +19,7 @@ The file format:
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
-from io import StringIO
 from pathlib import Path
 from typing import Union
 
@@ -166,9 +164,9 @@ def parse_eng_from_text(text: str) -> EngData:
     # Re-parse header to get the EngData object
     eng = _parse_header(
         next(
-            l.strip()
-            for l in lines
-            if l.strip() and not l.strip().startswith(";")
+            line.strip()
+            for line in lines
+            if line.strip() and not line.strip().startswith(";")
         )
     )
 

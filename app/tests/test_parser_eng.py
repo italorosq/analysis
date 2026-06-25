@@ -1,7 +1,6 @@
 """Tests for the RASP (.eng) file parser."""
 
 import pytest
-from pathlib import Path
 
 from backend.parser_eng import (
     EngData,

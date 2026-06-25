@@ -28,4 +28,5 @@ disable = [
     "R0913",  # too-many-arguments
     "R0917",  # too-many-positional-arguments
     "R0903",  # too-few-public-methods
+    "C1803",  # use-implicit-booleaness-not-comparison (we prefer explicit == [])
 ]
