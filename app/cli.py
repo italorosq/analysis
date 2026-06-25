@@ -194,13 +194,36 @@ def _print_report(csv_path, r, df):
 
 
 def main(argv=None):
-    """Ponto de entrada do CLI. Analisa argumentos e executa :func:`analyze`.
+    """Ponto de entrada do CLI. Analisa argumentos e executa o comando.
+
+    Supports two modes:
+        * ``analyze-campo <csv>`` -- analyze a CSV file (default mode).
+        * ``analise-campo biblioteca list|info <nome>|eng <file>`` -- library operations.
 
     Args:
         argv: Lista de argumentos (padrão: ``sys.argv[1:]``).
 
     Returns:
-        int: Código de saída passado por :func:`analyze`.
+        int: Código de saída.
+    """
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # Check if user invoked the "biblioteca" subcommand
+    if len(argv) > 0 and argv[0] == "biblioteca":
+        return _main_biblioteca(argv[1:])
+
+    return _main_analyze(argv)
+
+
+def _main_analyze(argv) -> int:
+    """Main entry point for the original analyze-campo command.
+
+    Args:
+        argv: Argument list (excluding program name).
+
+    Returns:
+        int: Exit code.
     """
     parser = argparse.ArgumentParser(
         prog="analise-campo",
@@ -221,6 +244,200 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     return analyze(args.csv, as_json=args.json, save=args.save, no_color=args.no_color)
+
+
+def _main_biblioteca(argv) -> int:
+    """Main entry point for the ``biblioteca`` subcommand.
+
+    Args:
+        argv: Argument list after ``biblioteca``.
+
+    Returns:
+        int: Exit code.
+    """
+    if len(argv) == 0:
+        print("Uso: analise-campo biblioteca <list|info NOME|eng ARQUIVO>")
+        return 1
+
+    subcmd = argv[0]
+
+    if subcmd == "list":
+        return _biblioteca_list()
+    elif subcmd == "info":
+        if len(argv) < 2:
+            print("Uso: analise-campo biblioteca info <NOME>")
+            return 1
+        return _biblioteca_info(argv[1])
+    elif subcmd == "eng":
+        if len(argv) < 2:
+            print("Uso: analise-campo biblioteca eng <ARQUIVO>")
+            return 1
+        return _biblioteca_eng(argv[1])
+    else:
+        print(f"Comando desconhecido: {subcmd}")
+        return 1
+
+
+def _biblioteca_list() -> int:
+    """List all motors in the library.
+
+    Returns:
+        int: Exit code (0 on success).
+    """
+    from backend.biblioteca import scan_library
+
+    motors = scan_library(sort_by="data")
+
+    if not motors:
+        print("Biblioteca vazia.")
+        return 0
+
+    line = "─" * 70
+    print()
+    print(f"{C.MAGENTA}{C.BOLD}╔{'═' * 68}╗{C.RESET}")
+    print(f"{C.MAGENTA}{C.BOLD}║   BIBLIOTECA DE TESTES · Serra Rocketry{' ' * 27}║{C.RESET}")
+    print(f"{C.MAGENTA}{C.BOLD}╚{'═' * 68}╝{C.RESET}")
+    print()
+    print(f"  {'Nome':<30} {'Data':<12} {'Classe':<14} {'Impulso [N·s]':>14}")
+    print(f"  {C.CYAN}{line}{C.RESET}")
+
+    for m in motors:
+        date_str = m.data_teste[:10] if m.data_teste else "---"
+        print(
+            f"  {m.nome:<30} {C.DIM}{date_str:<12}{C.RESET} "
+            f"{m.classe:<14} {C.YELLOW}{m.impulso_total_Ns:>14.3f}{C.RESET}"
+        )
+
+    print(f"  {C.CYAN}{line}{C.RESET}")
+    print(f"  {C.DIM}{len(motors)} motor(es) encontrado(s){C.RESET}")
+    print()
+    return 0
+
+
+def _biblioteca_info(nome: str) -> int:
+    """Show detailed info for a specific motor.
+
+    Args:
+        nome: Motor name.
+
+    Returns:
+        int: Exit code (0 on success, 1 on error).
+    """
+    from backend.biblioteca import get_motor, list_files
+
+    motor = get_motor(nome)
+    if motor is None:
+        print(f"{C.RED}Motor não encontrado: {nome}{C.RESET}", file=sys.stderr)
+        return 1
+
+    files = list_files(nome)
+
+    line = "─" * 56
+    print()
+    print(f"{C.MAGENTA}{C.BOLD}╔{'═' * 54}╗{C.RESET}")
+    print(f"{C.MAGENTA}{C.BOLD}║   {motor.nome:^48}   ║{C.RESET}")
+    print(f"{C.MAGENTA}{C.BOLD}╚{'═' * 54}╝{C.RESET}")
+    print()
+
+    # Results table
+    print(f"  {C.BOLD}CLASSE:{C.RESET}  {C.GREEN}{motor.classe}{C.RESET}")
+    print(f"  {C.CYAN}{line}{C.RESET}")
+
+    rows = [
+        ("Impulso Total", f"{motor.impulso_total_Ns:.3f}", "N·s"),
+        ("Empuxo Médio", f"{motor.empuxo_medio_N:.3f}", "N"),
+        ("Empuxo Máximo", f"{motor.empuxo_maximo_N:.3f}", "N"),
+        ("Pressão Média", f"{motor.pressao_media_MPa:.3f}", "MPa"),
+        ("Pressão Máxima", f"{motor.pressao_maxima_MPa:.3f}", "MPa"),
+        ("Duração", f"{motor.duracao_s:.2f}", "s"),
+        ("Pontos Amostrais", str(motor.pontos_amostrais), ""),
+    ]
+    for label, value, unit in rows:
+        print(f"  {label:.<22} {C.YELLOW}{value:>10}{C.RESET} {C.DIM}{unit}{C.RESET}")
+
+    # OpenMotor data
+    if motor.openmotor_dados:
+        eng = motor.openmotor_dados
+        print()
+        print(f"  {C.BOLD}DADOS OPENMOTOR:{C.RESET}")
+        print(f"  {C.CYAN}{line}{C.RESET}")
+        eng_rows = [
+            ("Designação", eng.get("designation", "---")),
+            ("Fabricante", eng.get("manufacturer", "---")),
+            ("Diâmetro", f"{eng.get('diameter_mm', 0):.0f} mm"),
+            ("Comprimento", f"{eng.get('length_mm', 0):.0f} mm"),
+            ("Massa Propelente", f"{eng.get('propellant_mass_kg', 0):.4f} kg"),
+            ("Massa Total", f"{eng.get('total_mass_kg', 0):.4f} kg"),
+            ("Isp Teórico", f"{eng.get('isp_seconds', '---')} s"),
+            ("Impulso (ENG)", f"{eng.get('total_impulse_Ns', 0):.3f} N·s"),
+        ]
+        for label, value in eng_rows:
+            print(f"  {label:.<22} {C.YELLOW}{value}{C.RESET}")
+
+    # Files
+    print()
+    print(f"  {C.BOLD}ARQUIVOS:{C.RESET}")
+    print(f"  {C.CYAN}{line}{C.RESET}")
+    all_files = []
+    for category in ("csv", "png", "pdf", "eng", "fotos"):
+        all_files.extend(files.get(category, []))
+    if all_files:
+        for fname in all_files:
+            print(f"  • {fname}")
+    else:
+        print(f"  {C.DIM}(nenhum){C.RESET}")
+
+    print(f"  {C.CYAN}{line}{C.RESET}")
+    print()
+    return 0
+
+
+def _biblioteca_eng(filepath: str) -> int:
+    """Preview data from an .eng file without saving.
+
+    Args:
+        filepath: Path to the .eng file.
+
+    Returns:
+        int: Exit code (0 on success, 1 on error).
+    """
+    from pathlib import Path
+
+    from backend.parser_eng import parse_eng_file
+
+    path = Path(filepath)
+    if not path.exists():
+        print(f"{C.RED}Arquivo não encontrado: {filepath}{C.RESET}", file=sys.stderr)
+        return 1
+
+    try:
+        eng = parse_eng_file(path)
+    except (ValueError, FileNotFoundError) as e:
+        print(f"{C.RED}Erro ao ler .eng: {e}{C.RESET}", file=sys.stderr)
+        return 1
+
+    line = "─" * 44
+    print()
+    print(f"{C.MAGENTA}{C.BOLD}╔{'═' * 42}╗{C.RESET}")
+    print(f"{C.MAGENTA}{C.BOLD}║   PREVIEW .eng · Serra Rocketry{' ' * 10}║{C.RESET}")
+    print(f"{C.MAGENTA}{C.BOLD}╚{'═' * 42}╝{C.RESET}")
+    print()
+    print(f"  Designação:      {C.GREEN}{eng.designation}{C.RESET}")
+    print(f"  Fabricante:      {eng.manufacturer}")
+    print(f"  Diâmetro:        {eng.diameter_mm} mm")
+    print(f"  Comprimento:     {eng.length_mm} mm")
+    print(f"  Delays:          {eng.delays}")
+    print(f"  {C.CYAN}{line}{C.RESET}")
+    print(f"  Massa Propelente: {eng.propellant_mass_kg:.4f} kg")
+    print(f"  Massa Total:      {eng.total_mass_kg:.4f} kg")
+    print(f"  {C.CYAN}{line}{C.RESET}")
+    print(f"  Empuxo Máximo:    {C.YELLOW}{eng.max_thrust_N:.1f} N{C.RESET}")
+    print(f"  Impulso Total:    {C.YELLOW}{eng.total_impulse_Ns:.3f} N·s{C.RESET}")
+    print(f"  Isp Teórico:      {eng.isp_seconds or '---'} s")
+    print(f"  Pontos de dados:  {len(eng.thrust_curve)}")
+    print(f"  {C.CYAN}{line}{C.RESET}")
+    print()
+    return 0
 
 
 if __name__ == "__main__":
