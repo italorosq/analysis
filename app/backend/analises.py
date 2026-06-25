@@ -550,7 +550,8 @@ class motor_analisys:  # pylint: disable=invalid-name
         Args:
             name: Nome base para os arquivos gerados.
             output_dir: Diretório de destino. Se ``None``, usa
-                ``app/data/motor_result`` (criado se não existir).
+                ``data/motor_result`` (legacy) ou a biblioteca se o motor
+                já estiver registrado nela.
 
         Side Effects:
             Gera os seguintes arquivos em ``output_dir``:
@@ -560,7 +561,14 @@ class motor_analisys:  # pylint: disable=invalid-name
                 * ``{name}.pdf``            -- relatório PDF.
         """
         if output_dir is None:
-            output_dir = Path(__file__).parent.parent / "data" / "motor_result"
+            from backend.biblioteca import get_motor, LIBRARY_DIR
+
+            # Check if motor is already in the library
+            existing = get_motor(name)
+            if existing is not None:
+                output_dir = LIBRARY_DIR / name
+            else:
+                output_dir = Path(__file__).parent.parent / "data" / "motor_result"
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
