@@ -8,9 +8,10 @@ desenvolvido pela equipe **Serra Rocketry (UERJ)**.
 | Documento | Descrição |
 |-----------|-----------|
 | [architecture.md](architecture.md) | Visão geral da arquitetura, componentes e fluxo de dados |
+| [biblioteca.md](biblioteca.md) | Biblioteca de testes: organização, `motor.json`, `.eng` (RASP), migração |
 | [data-format.md](data-format.md) | Formato do CSV gerado pelo firmware do *thrust stand* |
 | [installation.md](installation.md) | Instalação local e deploy via Docker |
-| [cli.md](cli.md) | Uso do CLI de análise rápida de campo |
+| [cli.md](cli.md) | Uso do CLI de análise rápida de campo + biblioteca |
 | [api.md](api.md) | Referência das rotas web (HTTP) |
 | [backend.md](backend.md) | Referência dos módulos de processamento (`backend/`) |
 | [development.md](development.md) | Lint, testes, convenções e contribuição |
@@ -26,25 +27,34 @@ ESP32 + célula de carga HX711 + sensor de pressão), o sistema:
 - Gera **visualizações interativas** das curvas de empuxo e pressão;
 - Permite **filtragem interativa** de dados brutos (limiar + intervalo de tempo);
 - Produz **relatório PDF** profissional (ReportLab), gráfico PNG e CSVs;
-- Oferece um **CLI** para insights imediatos em campo, sem subir o servidor.
+- Oferece um **CLI** para insights imediatos em campo, sem subir o servidor;
+- Armazena testes na **Biblioteca** com metadados estruturados, permitindo anexar
+  arquivos `.eng` (OpenMotor/RASP) e fotos, com parser e preview integrados.
 
 ## Diagrama rápido
 
 ```
-┌─────────────────┐     CSV      ┌──────────────────────┐
-│  Thrust Stand   │ ───────────► │   Análise Flask      │
-│ ESP32 + HX711   │ Tempo,Empuxo │                      │
-│ + sensor pressão│   ,Pressao   │  ┌────────────────┐  │
-└─────────────────┘              │  │  Web (Flask)   │  │
-                                 │  │  porta 5000    │  │
-                                 │  └────────────────┘  │
-                                 │  ┌────────────────┐  │
-                                 │  │  CLI (cli.py)  │  │
-                                 │  └────────────────┘  │
-                                 │           │          │
-                                 │           ▼          │
-                                 │  CSV · PNG · PDF      │
-                                 └──────────────────────┘
+┌─────────────────┐     CSV      ┌─────────────────────────────────┐
+│  Thrust Stand   │ ───────────► │   Análise Flask                  │
+│ ESP32 + HX711   │ Tempo,Empuxo │                                  │
+│ + sensor pressão│   ,Pressao   │  ┌───────────────────────────┐  │
+└─────────────────┘              │  │  Web (Flask) porta 5000   │  │
+                                 │  └───────────────────────────┘  │
+                                 │  ┌───────────────────────────┐  │
+                                 │  │  CLI (cli.py)             │  │
+                                 │  │  + biblioteca subcommand  │  │
+                                 │  └───────────────────────────┘  │
+                                 │           │                      │
+                                 │           ▼                      │
+┌─────────────────┐   .eng       │  ┌───────────────────────────┐  │
+│  OpenMotor/RASP │ ───────────► │  │  Biblioteca               │  │
+│  arquivo .eng   │  (upload)    │  │  data/biblioteca/<nome>/  │  │
+└─────────────────┘              │  │  ├── motor.json           │  │
+                                 │  │  ├── <nome>.pdf           │  │
+                                 │  │  ├── <nome>_grafico.png   │  │
+                                 │  │  ├── openmotor.eng        │  │
+                                 │  │  └── foto_*.jpg           │  │
+                                 │  └───────────────────────────┘  │
+                                 └──────────────────────────────────┘
 ```
 
-Para começar rapidamente, veja [installation.md](installation.md).
