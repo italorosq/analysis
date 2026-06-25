@@ -397,8 +397,8 @@ def create_app() -> Flask:
     """Cria e configura a aplicação Flask (padrão *application factory*).
 
     Configura a chave secreta (via variável de ambiente ``SECRET_KEY`` ou
-    valor padrão para desenvolvimento), o limite de upload e registra o
-    blueprint :data:`page` com o prefixo ``/serra-rocketry``.
+    valor padrão para desenvolvimento), o limite de upload e registra os
+    blueprints :data:`page` e ``biblioteca_bp`` com seus prefixos.
 
     Returns:
         Flask: Instância da aplicação pronta para uso.
@@ -407,6 +407,15 @@ def create_app() -> Flask:
     app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
     app.config["MAX_CONTENT_LENGTH"] = _MAX_CONTENT_LENGTH
     app.register_blueprint(page, url_prefix=f"/{project_name}")
+
+    # Register library blueprint (import inside factory to ensure sys.path
+    # includes the app/ directory when running as ``python app/app.py``)
+    import importlib
+
+    biblioteca_bp = importlib.import_module("biblioteca_bp")
+
+    app.register_blueprint(biblioteca_bp.blueprint, url_prefix="/biblioteca")
+
     return app
 
 

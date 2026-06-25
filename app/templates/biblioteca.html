@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Biblioteca - Serra Rocketry{% endblock %}
+{% block page_title %}Biblioteca de Testes{% endblock %}
+
+{% block content %}
+<div class="library-header">
+  <div class="library-controls">
+    <div class="sort-controls">
+      <label>Ordenar por:</label>
+      <a href="{{ url_for('biblioteca.index', sort='data') }}"
+         class="sort-btn {% if sort_by == 'data' %}active{% endif %}">Data</a>
+      <a href="{{ url_for('biblioteca.index', sort='impulso') }}"
+         class="sort-btn {% if sort_by == 'impulso' %}active{% endif %}">Impulso</a>
+      <a href="{{ url_for('biblioteca.index', sort='classe') }}"
+         class="sort-btn {% if sort_by == 'classe' %}active{% endif %}">Classe</a>
+    </div>
+    {% if legacy_exists %}
+    <form method="POST" action="{{ url_for('biblioteca.migrate') }}" style="display:inline;">
+      <button type="submit" class="btn btn-secondary">Migrar dados legados</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if motors %}
+<div class="library-grid">
+  {% for motor in motors %}
+  <a href="{{ url_for('biblioteca.detalhe', nome=motor.nome) }}" class="motor-card">
+    <div class="motor-card-header">
+      <h3 class="motor-nome">{{ motor.nome }}</h3>
+      <span class="motor-classe">{{ motor.classe or '---' }}</span>
+    </div>
+    <div class="motor-card-body">
+      <div class="motor-stat">
+        <span class="stat-label">Impulso</span>
+        <span class="stat-value">{{ "%.1f"|format(motor.impulso_total_Ns) }} N·s</span>
+      </div>
+      <div class="motor-stat">
+        <span class="stat-label">Empuxo max</span>
+        <span class="stat-value">{{ "%.1f"|format(motor.empuxo_maximo_N) }} N</span>
+      </div>
+      <div class="motor-stat">
+        <span class="stat-label">Duracao</span>
+        <span class="stat-value">{{ "%.1f"|format(motor.duracao_s) }} s</span>
+      </div>
+      <div class="motor-stat">
+        <span class="stat-label">Amostras</span>
+        <span class="stat-value">{{ motor.pontos_amostrais }}</span>
+      </div>
+    </div>
+    <div class="motor-card-footer">
+      {% if motor.data_teste %}
+      <span class="motor-date">{{ motor.data_teste[:10] }}</span>
+      {% else %}
+      <span class="motor-date">---</span>
+      {% endif %}
+      <div class="motor-badges">
+        {% if motor.openmotor_eng %}<span class="badge badge-eng">.eng</span>{% endif %}
+        {% if motor.fotos %}<span class="badge badge-foto">foto</span>{% endif %}
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="library-empty">
+  <p>Nenhum teste salvo na biblioteca ainda.</p>
+  <p><a href="{{ url_for('page.analise') }}" class="btn btn-primary">Fazer upload de CSV</a></p>
+</div>
+{% endif %}
+{% endblock %}

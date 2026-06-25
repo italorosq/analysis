@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}{{ motor.nome }} - Biblioteca{% endblock %}
+{% block page_title %}{{ motor.nome }}{% endblock %}
+
+{% block content %}
+<div class="detail-header">
+  <a href="/biblioteca/" class="back-link">&larr; Voltar</a>
+  <div class="detail-actions">
+    <form method="POST" action="/biblioteca/{{ motor.nome }}/delete"
+          style="display:inline;"
+          onsubmit="return confirm('Remover {{ motor.nome }} e todos os arquivos?');">
+      <button type="submit" class="btn btn-danger">Remover motor</button>
+    </form>
+  </div>
+</div>
+
+<div class="detail-layout">
+  <!-- Left column: insights table -->
+  <div class="detail-main">
+    <section class="card">
+      <h3>Resultados do Teste</h3>
+      <table class="data-table">
+        <tbody>
+          <tr><th>Classe</th><td class="highlight">{{ motor.classe or '---' }}</td></tr>
+          <tr><th>Impulso Total</th><td>{{ "%.3f"|format(motor.impulso_total_Ns) }} N·s</td></tr>
+          <tr><th>Empuxo Maximo</th><td>{{ "%.3f"|format(motor.empuxo_maximo_N) }} N</td></tr>
+          <tr><th>Empuxo Medio</th><td>{{ "%.3f"|format(motor.empuxo_medio_N) }} N</td></tr>
+          <tr><th>Pressao Maxima</th><td>{{ "%.3f"|format(motor.pressao_maxima_MPa) }} MPa</td></tr>
+          <tr><th>Pressao Media</th><td>{{ "%.3f"|format(motor.pressao_media_MPa) }} MPa</td></tr>
+          <tr><th>Duracao</th><td>{{ "%.2f"|format(motor.duracao_s) }} s</td></tr>
+          <tr><th>Pontos Amostrais</th><td>{{ motor.pontos_amostrais }}</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    {% if motor.openmotor_dados %}
+    <section class="card">
+      <h3>Dados OpenMotor (.eng)</h3>
+      <table class="data-table">
+        <tbody>
+          <tr><th>Designacao</th><td>{{ motor.openmotor_dados.designation }}</td></tr>
+          <tr><th>Fabricante</th><td>{{ motor.openmotor_dados.manufacturer }}</td></tr>
+          <tr><th>Diametro</th><td>{{ motor.openmotor_dados.diameter_mm }} mm</td></tr>
+          <tr><th>Comprimento</th><td>{{ motor.openmotor_dados.length_mm }} mm</td></tr>
+          <tr><th>Massa Propelente</th><td>{{ "%.4f"|format(motor.openmotor_dados.propellant_mass_kg) }} kg</td></tr>
+          <tr><th>Massa Total</th><td>{{ "%.4f"|format(motor.openmotor_dados.total_mass_kg) }} kg</td></tr>
+          <tr><th>Isp Teorico</th><td>{{ motor.openmotor_dados.isp_seconds or '---' }} s</td></tr>
+          <tr><th>Impulso (ENG)</th><td>{{ "%.3f"|format(motor.openmotor_dados.total_impulse_Ns) }} N·s</td></tr>
+          <tr><th>Empuxo Max (ENG)</th><td>{{ "%.1f"|format(motor.openmotor_dados.max_thrust_N) }} N</td></tr>
+          <tr><th>Duracao (ENG)</th><td>{{ "%.2f"|format(motor.openmotor_dados.burn_time_s) }} s</td></tr>
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <h3>Notas</h3>
+      <textarea id="notes" class="notes-input"
+                data-motor="{{ motor.nome }}">{{ motor.notas }}</textarea>
+    </section>
+  </div>
+
+  <!-- Right column: files and preview -->
+  <div class="detail-sidebar">
+    {% if files.pdf or files.png %}
+    <section class="card">
+      <h3>Preview</h3>
+      {% if files.pdf %}
+      <iframe src="/biblioteca/{{ motor.nome }}/file/{{ files.pdf[0] }}"
+              class="preview-frame" title="PDF preview"></iframe>
+      {% elif files.png %}
+      <img src="/biblioteca/{{ motor.nome }}/file/{{ files.png[0] }}"
+           class="preview-img" alt="Grafico">
+      {% endif %}
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <h3>Arquivos</h3>
+      <ul class="file-list">
+        {% for category, items in files.items() %}
+        {% for fname in items %}
+        <li class="file-item">
+          <span class="file-name">{{ fname }}</span>
+          <div class="file-actions">
+            <a href="/biblioteca/{{ motor.nome }}/file/{{ fname }}"
+               class="btn btn-sm" target="_blank">Visualizar</a>
+            <form method="POST"
+                  action="/biblioteca/{{ motor.nome }}/delete_file/{{ fname }}"
+                  style="display:inline;"
+                  onsubmit="return confirm('Remover {{ fname }}?');">
+              <button type="submit" class="btn btn-sm btn-danger">Remover</button>
+            </form>
+          </div>
+        </li>
+        {% endfor %}
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="card">
+      <h3>Upload</h3>
+      <form method="POST" action="/biblioteca/{{ motor.nome }}/upload"
+            enctype="multipart/form-data" class="upload-form">
+        <label>Arquivo .eng (OpenMotor/RASP):</label>
+        <input type="file" name="file" accept=".eng" class="file-input">
+        <label>Foto do teste:</label>
+        <input type="file" name="file" accept=".jpg,.jpeg,.png" class="file-input">
+        <button type="submit" class="btn btn-primary">Enviar</button>
+      </form>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Auto-save notes
+  const notesEl = document.getElementById('notes');
+  if (notesEl) {
+    let timeout;
+    notesEl.addEventListener('input', () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        const motor = notesEl.dataset.motor;
+        const formData = new FormData();
+        formData.append('notes', notesEl.value);
+        fetch(`/biblioteca/${motor}/update_notes`, {
+          method: 'POST',
+          body: formData,
+        }).then(r => r.json()).then(d => {
+          if (d.success) console.log('Notes saved');
+        });
+      }, 1000);
+    });
+  }
+</script>
+{% endblock %}
