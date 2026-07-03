@@ -596,12 +596,12 @@ class motor_analisys:  # pylint: disable=invalid-name
                 * ``{name}.pdf``            -- relatório PDF.
         """
         if output_dir is None:
-            from backend.biblioteca import get_motor, LIBRARY_DIR
+            from backend.biblioteca import get_motor, _get_library_dir
 
             # Check if motor is already in the library
             existing = get_motor(name)
             if existing is not None:
-                output_dir = LIBRARY_DIR / name
+                output_dir = _get_library_dir() / name
             else:
                 output_dir = Path(__file__).parent.parent / "data" / "motor_result"
         output_dir = Path(output_dir)

@@ -86,7 +86,7 @@ def _sparkline(values, width=50):
     return "".join(out)
 
 
-def analyze(csv_path, as_json=False, save=None, no_color=False):
+def analyze(csv_path, as_json=False, save=None, no_color=False, units="kg", remove_outliers=False):
     """Processa um CSV de teste estático e imprime/salva os insights.
 
     É a função central do CLI: carrega o arquivo via
@@ -101,6 +101,8 @@ def analyze(csv_path, as_json=False, save=None, no_color=False):
         save: Se informado, nome base para salvar a análise completa em
             ``data/motor_result/``.
         no_color: Se ``True``, desativa as cores ANSI na saída.
+        units: Unidade de medida do empuxo (``'kg'`` ou ``'g'``).
+        remove_outliers: Se ``True``, remove outliers antes da análise.
 
     Returns:
         int: Código de saída (0 em sucesso; 1 em erro de arquivo/parsing).
@@ -116,7 +118,7 @@ def analyze(csv_path, as_json=False, save=None, no_color=False):
         return 1
 
     try:
-        motor = motor_analisys(csv_path)
+        motor = motor_analisys(csv_path, units=units)
     except Exception as e:  # pylint: disable=broad-except
         print(f"{C.RED}Erro ao processar o CSV: {e}{C.RESET}", file=sys.stderr)
         print(
@@ -125,13 +127,19 @@ def analyze(csv_path, as_json=False, save=None, no_color=False):
         )
         return 1
 
+    outliers_removed = 0
+    if remove_outliers:
+        outliers_removed = motor.remove_outliers()
+
     result = motor.get_result()
     df = motor.get_data()
 
     if as_json:
+        if remove_outliers:
+            result["Outliers removidos"] = outliers_removed
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
-        _print_report(csv_path, result, df)
+        _print_report(csv_path, result, df, outliers_removed)
 
     if save:
         motor.save_analisys(save)
@@ -144,7 +152,7 @@ def analyze(csv_path, as_json=False, save=None, no_color=False):
     return 0
 
 
-def _print_report(csv_path, r, df):
+def _print_report(csv_path, r, df, outliers_removed=0):
     """Imprime o relatório formatado e colorido no terminal.
 
     Args:
@@ -152,6 +160,7 @@ def _print_report(csv_path, r, df):
         r: Dicionário de resultados retornado por
             :meth:`~backend.analises.motor_analisys.get_result`.
         df: DataFrame com os dados (usado para o sparkline da curva de empuxo).
+        outliers_removed: Número de outliers removidos (opcional).
     """
     line = "─" * 56
     print()
@@ -161,6 +170,8 @@ def _print_report(csv_path, r, df):
     )
     print(f"{C.MAGENTA}{C.BOLD}╚{'═' * 54}╝{C.RESET}")
     print(f"{C.DIM}Arquivo: {csv_path.name}{C.RESET}")
+    if outliers_removed > 0:
+        print(f"{C.YELLOW}⚠  Outliers removidos: {outliers_removed} pontos{C.RESET}")
     print()
 
     # Highlight: motor class
@@ -241,9 +252,27 @@ def _main_analyze(argv) -> int:
     parser.add_argument(
         "--no-color", action="store_true", help="Desativa cores ANSI na saída"
     )
+    parser.add_argument(
+        "--units",
+        choices=["kg", "g"],
+        default="kg",
+        help="Unidade do empuxo: kg (padrão) ou g (gramas)",
+    )
+    parser.add_argument(
+        "--remove-outliers",
+        action="store_true",
+        help="Remove outliers via filtro percentil (P99) antes da análise",
+    )
     args = parser.parse_args(argv)
 
-    return analyze(args.csv, as_json=args.json, save=args.save, no_color=args.no_color)
+    return analyze(
+        args.csv,
+        as_json=args.json,
+        save=args.save,
+        no_color=args.no_color,
+        units=args.units,
+        remove_outliers=args.remove_outliers,
+    )
 
 
 def _main_biblioteca(argv) -> int:
