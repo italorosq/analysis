@@ -89,13 +89,18 @@ class motor_analisys:  # pylint: disable=invalid-name
             :meth:`get_result` e usado por :meth:`pdf`.
     """
 
-    def __init__(self, archive: Union[str, Path, "object"]) -> None:
+    def __init__(
+        self, archive: Union[str, Path, "object"], units: str = "kg"
+    ) -> None:
         """Lê o CSV e gera as colunas derivadas em unidades do SI.
 
         Args:
             archive: Caminho do arquivo CSV ou objeto file-like (por exemplo,
                 o ``werkzeug.FileStorage`` recebido em um upload Flask). Deve
                 conter o cabeçalho ``Tempo,Empuxo,Pressao``.
+            units: Unidade de medida do empuxo. ``'kg'`` (padrão) ou ``'g'``
+                (gramas). Quando ``'g'``, os valores são divididos por 1000
+                antes da conversão para Newtons.
 
         Side Effects:
             Popula ``self.df`` com as colunas convertidas:
@@ -107,7 +112,10 @@ class motor_analisys:  # pylint: disable=invalid-name
         self.df = pd.read_csv(archive)
 
         # Conversão de unidades para o SI
-        self.df["Empuxo_N"] = self.df["Empuxo"] * 9.81  # kg -> Newtons
+        empuxo_kg = self.df["Empuxo"]
+        if units == "g":
+            empuxo_kg = empuxo_kg / 1000.0  # gramas -> quilogramas
+        self.df["Empuxo_N"] = empuxo_kg * 9.81  # kg -> Newtons
         self.df["Tempo_s"] = self.df["Tempo"] / 1000.0  # ms -> segundos
         self.df["Pressao_MPa"] = self.df["Pressao"]  # já está em MPa
 
@@ -128,6 +136,33 @@ class motor_analisys:  # pylint: disable=invalid-name
             pandas.DataFrame: Os dados carregados com as colunas derivadas.
         """
         return self.df
+
+    def remove_outliers(self, method: str = "percentile", threshold: float = 3.0) -> int:
+        """Remove outliers usando método percentil.
+
+        Calcula o percentil 99 do empuxo e remove pontos cujo valor exceda
+        ``threshold`` vezes esse percentil. Este método é eficaz para remover
+        picos isolados de ruído do sensor (artefatos de leitura) que são
+        ordens de grandeza maiores que os dados reais de queima.
+
+        Args:
+            method: Método de detecção (``'percentile'``).
+            threshold: Fator multiplicativo sobre o percentil 99. Valores
+                maiores são mais permissivos. Padrão: 3.0 (remove pontos
+                acima de 3x o P99).
+
+        Returns:
+            int: Número de outliers removidos.
+        """
+        n_before = len(self.df)
+        p99 = self.df["Empuxo_N"].quantile(0.99)
+        upper = p99 * threshold
+        self.df = self.df[self.df["Empuxo_N"] <= upper].copy()
+        self.df.reset_index(drop=True, inplace=True)
+        # Recalcula tempo relativo após reset do índice
+        self.df["Tempo_rel"] = self.df["Tempo_s"] - self.df["Tempo_s"].iloc[0]
+        self.df["Tempo_rel"] = self.df["Tempo_rel"].round(4)
+        return n_before - len(self.df)
 
     def get_result(self) -> dict:
         """Calcula todas as métricas do teste estático.

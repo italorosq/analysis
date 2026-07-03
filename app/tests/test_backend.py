@@ -26,6 +26,7 @@ if str(APP_ROOT) not in sys.path:
 
 from backend.analises import motor_analisys  # noqa: E402
 from backend.tratamento import data_treatment  # noqa: E402
+from app import _active_motor_window  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -282,3 +283,42 @@ def test_save_treatment_writes_file(treatment, tmp_path):
     assert os.path.exists(path)
     assert Path(path).suffix == ".csv"
     assert Path(path).stat().st_size > 0
+
+
+# --------------------------------------------------------------------------- #
+# Recorte de janela ativa do motor
+# --------------------------------------------------------------------------- #
+def test_active_motor_window_trims_idle_segments():
+    import pandas as pd
+
+    # Longo período de coleta ociosa antes/depois da queima.
+    df = pd.DataFrame(
+        {
+            "Tempo_rel": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            "Empuxo_N": [0, 0, 0, 8, 10, 7, 0, 0, 0, 0],
+            "Pressao_MPa": [0, 0, 0, 0.3, 0.4, 0.25, 0, 0, 0, 0],
+        }
+    )
+
+    window = _active_motor_window(df)
+
+    # Com margem de 2 amostras, espera-se manter o intervalo [1, 7].
+    assert len(window) == 7
+    assert window["Empuxo_N"].tolist() == [0, 0, 8, 10, 7, 0, 0]
+    assert window["Tempo_rel"].iloc[0] == pytest.approx(0.0, abs=1e-9)
+    assert window["Tempo_rel"].iloc[-1] == pytest.approx(6.0, abs=1e-9)
+
+
+def test_active_motor_window_fallback_when_no_activity():
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {
+            "Tempo_rel": [0, 1, 2],
+            "Empuxo_N": [0.0, 0.0, 0.0],
+            "Pressao_MPa": [0.0, 0.0, 0.0],
+        }
+    )
+
+    window = _active_motor_window(df)
+    assert len(window) == len(df)

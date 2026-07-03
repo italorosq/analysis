@@ -18,6 +18,21 @@
       <div id="file-confirmation" class="file-confirmation" style="display: none;">
         <p>Arquivo selecionado: <span id="file-name"></span></p>
       </div>
+
+      <div class="options-row" style="display: flex; gap: 24px; margin: 16px 0; align-items: center; flex-wrap: wrap;">
+        <div>
+          <label for="units" style="font-weight: 600; margin-right: 6px;">Unidades do Empuxo:</label>
+          <select name="units" id="units" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc;">
+            <option value="kg" selected>kg (Quilogramas)</option>
+            <option value="g">g (Gramas)</option>
+          </select>
+        </div>
+        <div>
+          <input type="checkbox" name="remove_outliers" id="remove_outliers" checked style="margin-right: 4px;" />
+          <label for="remove_outliers" style="font-weight: 600;">Remover outliers (P99)</label>
+        </div>
+      </div>
+
       <button type="submit" id="upload-button" class="btn btn-primary" disabled>Processar Análise</button>
     </form>
   </div>

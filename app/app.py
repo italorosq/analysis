@@ -46,6 +46,69 @@ ALLOWED_EXTENSIONS: set[str] = {"csv", "txt"}
 _MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024
 
 
+def _active_motor_window(data):
+    """Extrai apenas o intervalo em que o motor está ativo.
+
+    A janela ativa é detectada usando limiares baixos de empuxo e pressão
+    para ignorar períodos de pré/pós-teste em que a caixa continua gravando.
+    Se não houver uma janela confiável, retorna o DataFrame original.
+    """
+    if data.empty:
+        return data
+
+    thrust = data["Empuxo_N"]
+    pressure = data["Pressao_MPa"]
+
+    thrust_peak = float(thrust.max())
+    pressure_peak = float(pressure.max())
+
+    thrust_threshold = max(0.2, thrust_peak * 0.05)
+    pressure_threshold = max(0.02, pressure_peak * 0.05)
+
+    active_mask = ((thrust >= thrust_threshold) | (pressure >= pressure_threshold)).tolist()
+    if not any(active_mask):
+        return data
+
+    # Une pequenas lacunas para evitar que ruído quebre a queima em muitos blocos.
+    gap_fill = 3
+    i = 0
+    n_points = len(active_mask)
+    while i < n_points:
+        if active_mask[i]:
+            i += 1
+            continue
+        gap_start = i
+        while i < n_points and not active_mask[i]:
+            i += 1
+        gap_end = i - 1
+        gap_len = gap_end - gap_start + 1
+        if gap_start > 0 and i < n_points and gap_len <= gap_fill:
+            for j in range(gap_start, gap_end + 1):
+                active_mask[j] = True
+
+    peak_pos = int(thrust.idxmax() - data.index.min())
+
+    # Escolhe o bloco ativo que contém o pico de empuxo.
+    start_pos = peak_pos
+    while start_pos > 0 and active_mask[start_pos - 1]:
+        start_pos -= 1
+
+    end_pos = peak_pos
+    while end_pos < n_points - 1 and active_mask[end_pos + 1]:
+        end_pos += 1
+
+    start_idx = int(data.index.min() + start_pos)
+    end_idx = int(data.index.min() + end_pos)
+
+    # Inclui uma pequena margem para visualizar ignição e extinção.
+    start_idx = max(int(data.index.min()), start_idx - 2)
+    end_idx = min(int(data.index.max()), end_idx + 2)
+
+    window = data.loc[start_idx:end_idx].copy()
+    window["Tempo_rel"] = (window["Tempo_rel"] - float(window["Tempo_rel"].iloc[0])).round(4)
+    return window
+
+
 def allowed_file(filename: str) -> bool:
     """Verifica se a extensão do arquivo está na lista permitida.
 
@@ -166,8 +229,15 @@ def upload_motor() -> str:
         )
 
     try:
-        motor = motor_analisys(uploaded_file)
+        units = request.form.get("units", "kg")
+        remove_outliers = request.form.get("remove_outliers", "") == "on"
+
+        motor = motor_analisys(uploaded_file, units=units)
+        outliers_removed = 0
+        if remove_outliers:
+            outliers_removed = motor.remove_outliers()
         data = motor.get_data()
+        data_window = _active_motor_window(data)
         result = motor.get_result()
         # Armazena na sessão para que save_motor possa recriar o objeto
         session["motor_data"] = {
@@ -177,9 +247,11 @@ def upload_motor() -> str:
         }
         return render_template(
             "graficos_motor.html",
-            x=data["Tempo_rel"].to_list(),
-            y=data["Empuxo_N"].to_list(),
+            x=data_window["Tempo_rel"].to_list(),
+            y=data_window["Empuxo_N"].to_list(),
+            y_pressure=data_window["Pressao_MPa"].to_list(),
             result=result,
+            outliers_removed=outliers_removed,
         )
     except Exception as exc:  # pylint: disable=broad-except
         return render_template(
@@ -266,7 +338,12 @@ def upload_data() -> str:
         )
 
     try:
-        data = data_treatment(uploaded_file)
+        units = request.form.get("units", "kg")
+        remove_outliers = request.form.get("remove_outliers", "") == "on"
+
+        data = data_treatment(uploaded_file, units=units)
+        if remove_outliers:
+            data.remove_outliers()
         data_raw = data.get_data()
         time_slider_min = float(data_raw["Tempo_rel"].min())
         time_slider_max = float(data_raw["Tempo_rel"].max())

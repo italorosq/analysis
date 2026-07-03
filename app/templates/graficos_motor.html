@@ -92,6 +92,11 @@
     </script>
     <div class="info_card">
       <div class="card" id="table" style="height: 70%">
+        {% if outliers_removed is defined and outliers_removed > 0 %}
+        <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; font-size: 0.9em;">
+          ⚠️ <strong>{{ outliers_removed }}</strong> outlier(s) removido(s) via filtro IQR.
+        </div>
+        {% endif %}
         <table>
           <thead>
             <tr>
