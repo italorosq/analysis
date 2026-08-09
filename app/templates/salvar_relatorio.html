@@ -87,6 +87,15 @@
               </label>
               {% endfor %}
             </div>
+            <div class="title-group legend-group">
+              <h4>Curve legends</h4>
+              {% for key, label in titulo_campos if key.startswith('legenda_') %}
+              <label class="title-field">
+                <span>{{ label }}</span>
+                <input type="text" name="{{ key }}" value="{{ titulos_atuais.get(key, '') }}" />
+              </label>
+              {% endfor %}
+            </div>
           </div>
         </section>
       </main>

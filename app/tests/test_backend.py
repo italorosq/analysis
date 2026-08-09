@@ -234,6 +234,26 @@ def test_save_analisys_writes_outputs(analysis, tmp_path):
     assert (out_dir / "UnitTestMotor.pdf").exists()
 
 
+def test_save_analisys_accepts_custom_curve_legends(analysis, tmp_path):
+    out_dir = tmp_path / "custom_legends"
+    analysis.save_analisys(
+        "LegendMotor",
+        out_dir,
+        titulos={
+            "legenda_bruto": "Raw load cell",
+            "legenda_suavizado": "Filtered load cell",
+            "legenda_pico": "Maximum thrust",
+            "legenda_area_impulso": "Integrated impulse",
+            "legenda_impulso_acumulado": "Impulse history",
+            "legenda_pontos_brutos": "Measured points",
+            "legenda_media_movel": "Moving average",
+            "legenda_spline": "Spline fit",
+        },
+    )
+    assert (out_dir / "LegendMotor.pdf").exists()
+    assert (out_dir / "graficos" / "LegendMotor_spline.png").exists()
+
+
 # --------------------------------------------------------------------------- #
 # data_treatment
 # --------------------------------------------------------------------------- #

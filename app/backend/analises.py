@@ -46,6 +46,16 @@ DEFAULT_TITULOS = {
     "rotulo_empuxo": "Thrust [N]",
     "rotulo_pressao": "Pressure [MPa]",
     "rotulo_impulso": "Impulse [N·s]",
+    "legenda_bruto": "Raw",
+    "legenda_suavizado": "Smoothed",
+    "legenda_pressao_bruto": "Raw pressure",
+    "legenda_pressao_suavizado": "Smoothed pressure",
+    "legenda_pico": "Peak",
+    "legenda_area_impulso": "Impulse area",
+    "legenda_impulso_acumulado": "Cumulative impulse",
+    "legenda_pontos_brutos": "Raw points",
+    "legenda_media_movel": "Moving average",
+    "legenda_spline": "Smoothed cubic spline",
 }
 
 # Ordem exibida no formulário da biblioteca (chave -> rótulo em pt-BR).
@@ -64,6 +74,16 @@ TITULOS_CAMPOS = [
     ("rotulo_empuxo", "Rótulo do eixo Y (empuxo)"),
     ("rotulo_pressao", "Rótulo do eixo Y (pressão)"),
     ("rotulo_impulso", "Rótulo do eixo Y (impulso)"),
+    ("legenda_bruto", "Legenda: curva bruta"),
+    ("legenda_suavizado", "Legenda: curva suavizada"),
+    ("legenda_pressao_bruto", "Legenda: pressão bruta"),
+    ("legenda_pressao_suavizado", "Legenda: pressão suavizada"),
+    ("legenda_pico", "Legenda: pico"),
+    ("legenda_area_impulso", "Legenda: área do impulso"),
+    ("legenda_impulso_acumulado", "Legenda: impulso acumulado"),
+    ("legenda_pontos_brutos", "Legenda: pontos brutos"),
+    ("legenda_media_movel", "Legenda: média móvel"),
+    ("legenda_spline", "Legenda: spline"),
 ]
 
 
@@ -461,16 +481,21 @@ class motor_analisys:  # pylint: disable=invalid-name
         # --- Curva de empuxo ---
         ax1.plot(
             t, f_raw,
-            color="#a0a8c0", linewidth=0.6, alpha=0.7, label="Bruto",
+            color="#a0a8c0", linewidth=0.6, alpha=0.7,
+            label=titulos["legenda_bruto"],
             zorder=1,
         )
         ax1.plot(
             t, f_smooth,
-            color="#002196", linewidth=2.2, label="Suavizado", zorder=2,
+            color="#002196", linewidth=2.2,
+            label=titulos["legenda_suavizado"], zorder=2,
         )
         peak_idx = int(np.argmax(f_smooth))
         peak_t, peak_f = t[peak_idx], f_smooth[peak_idx]
-        ax1.plot(peak_t, peak_f, "o", color="#e63946", markersize=8, zorder=3)
+        ax1.plot(
+            peak_t, peak_f, "o", color="#e63946", markersize=8,
+            label=titulos["legenda_pico"], zorder=3,
+        )
         ax1.annotate(
             f"Pico: {peak_f:.1f} N\n@ {peak_t:.2f} s",
             xy=(peak_t, peak_f),
@@ -488,11 +513,13 @@ class motor_analisys:  # pylint: disable=invalid-name
         # --- Curva de pressão ---
         ax2.plot(
             t, p_raw,
-            color="#a0a8c0", linewidth=0.6, alpha=0.7, label="Bruto", zorder=1,
+            color="#a0a8c0", linewidth=0.6, alpha=0.7,
+            label=titulos["legenda_pressao_bruto"], zorder=1,
         )
         ax2.plot(
             t, p_smooth,
-            color="#0064C8", linewidth=2.2, label="Suavizado", zorder=2,
+            color="#0064C8", linewidth=2.2,
+            label=titulos["legenda_pressao_suavizado"], zorder=2,
         )
         self._figure_style(
             ax2, xlabel=titulos["rotulo_tempo"], ylabel=titulos["rotulo_pressao"],
@@ -551,19 +578,24 @@ class motor_analisys:  # pylint: disable=invalid-name
 
         _fig, ax = plt.subplots(figsize=(10, 6))
         ax.fill_between(
-            t, f_smooth, color="#002196", alpha=0.18, label="Impulso (área)",
+            t, f_smooth, color="#002196", alpha=0.18,
+            label=titulos["legenda_area_impulso"],
             zorder=1,
         )
         ax.plot(
             t, f_raw, color="#a0a8c0", linewidth=0.6, alpha=0.7,
-            label="Bruto", zorder=2,
+            label=titulos["legenda_bruto"], zorder=2,
         )
         ax.plot(
-            t, f_smooth, color="#002196", linewidth=2.4, label="Suavizado", zorder=3,
+            t, f_smooth, color="#002196", linewidth=2.4,
+            label=titulos["legenda_suavizado"], zorder=3,
         )
         peak_idx = int(np.argmax(f_smooth))
         peak_t, peak_f = t[peak_idx], f_smooth[peak_idx]
-        ax.plot(peak_t, peak_f, "o", color="#e63946", markersize=9, zorder=4)
+        ax.plot(
+            peak_t, peak_f, "o", color="#e63946", markersize=9,
+            label=titulos["legenda_pico"], zorder=4,
+        )
         ax.axvline(peak_t, color="#2b124c", linestyle="--", alpha=0.6, zorder=2)
         ax.annotate(
             f"Pico: {peak_f:.1f} N @ {peak_t:.2f} s",
@@ -635,10 +667,11 @@ class motor_analisys:  # pylint: disable=invalid-name
             ax.fill_between(t_mid, impulse, color="#e07b00", alpha=0.2)
             ax.plot(
                 t_mid, impulse, color="#e07b00", linewidth=2.6,
-                label="Impulso acumulado (N·s)",
+                label=titulos["legenda_impulso_acumulado"],
             )
             ax.plot(
                 t_mid[-1], impulse[-1], "o", color="#e63946", markersize=9,
+                label=titulos["legenda_pico"],
             )
             ax.annotate(
                 f"Impulso total: {total:.2f} N·s",
@@ -710,27 +743,28 @@ class motor_analisys:  # pylint: disable=invalid-name
             step = max(1, len(xi) // 300)
             ax.scatter(
                 xi[::step], yi[::step], color="#a0a8c0", s=12, alpha=0.5,
-                label="Pontos brutos (decimados)",
+                label=titulos["legenda_pontos_brutos"],
             )
         else:
             ax.scatter(
-                xi, yi, color="#b0b0b0", s=14, alpha=0.5, label="Pontos brutos",
+                xi, yi, color="#b0b0b0", s=14, alpha=0.5,
+                label=titulos["legenda_pontos_brutos"],
             )
         # Curva suavizada (média móvel) — guia visual
         ax.plot(
             xi, yi_smooth, color="#8ecae6", linewidth=1.0, alpha=0.8,
-            label="Média móvel",
+            label=titulos["legenda_media_movel"],
         )
         # Spline sobre a suavizada — curva principal
         ax.plot(
             xs, curve(xs), color="#d62728", linewidth=2.6,
-            label="Spline cúbica (suavizada)",
+            label=titulos["legenda_spline"],
         )
         # Marca o pico da spline
         peak_idx = int(np.argmax(curve(xs)))
         ax.plot(
             xs[peak_idx], curve(xs)[peak_idx], "o", color="#e63946",
-            markersize=8,
+            markersize=8, label=titulos["legenda_pico"],
         )
         self._figure_style(
             ax, xlabel=titulos["rotulo_tempo"], ylabel=titulos["rotulo_empuxo"],
