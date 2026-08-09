@@ -8,18 +8,7 @@ from __future__ import annotations
 
 import os
 
-from flask import (
-    Blueprint,
-    abort,
-    flash,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    send_from_directory,
-    url_for,
-)
-
+from backend.analises import TITULOS_CAMPOS, merge_titulos
 from backend.biblioteca import (
     MotorMetadata,
     delete_motor,
@@ -39,6 +28,17 @@ from backend.config import (
     LIBRARY_DIR,
 )
 from backend.parser_eng import parse_eng_from_text
+from flask import (
+    Blueprint,
+    abort,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    url_for,
+)
 
 # ---------------------------------------------------------------------------
 # Blueprint
@@ -136,6 +136,8 @@ def detalhe(nome: str) -> str:
         "biblioteca_detalhe.html",
         motor=motor,
         files=files,
+        titulo_campos=TITULOS_CAMPOS,
+        titulos_atuais=merge_titulos(motor.graficos_titulos),
     )
 
 
@@ -228,30 +230,32 @@ def upload(nome: str) -> str:
     return redirect(url_for("biblioteca.detalhe", nome=nome))
 
 
-@blueprint.route("/<nome>/file/<filename>")
+@blueprint.route("/<nome>/file/<path:filename>")
 def file_download(nome: str, filename: str):
     """Serve a file from a motor's library directory for inline preview.
 
+    Permite caminhos relativos (ex.: ``graficos/motor_forca_tempo.png``),
+    limitando sempre ao diretório do motor.
+
     Args:
         nome: Motor name.
-        filename: File to serve.
+        filename: File to serve (pode incluir subpasta).
 
     Raises:
         404: If the motor or file does not exist.
     """
     nome = _safe_filename(nome)
-    filename = _safe_filename(filename)
 
     if get_motor(nome) is None:
         abort(404)
 
     motor_dir = LIBRARY_DIR / nome
-    file_path = motor_dir / filename
-
-    if not file_path.exists():
+    file_path = (motor_dir / filename).resolve()
+    motor_root = motor_dir.resolve()
+    if not str(file_path).startswith(str(motor_root)) or not file_path.is_file():
         abort(404)
 
-    return send_from_directory(str(motor_dir), filename, as_attachment=False)
+    return send_from_directory(str(motor_root), filename, as_attachment=False)
 
 
 @blueprint.route("/<nome>/delete", methods=["POST"])
@@ -274,25 +278,27 @@ def delete(nome: str) -> str:
     return redirect(url_for("biblioteca.index"))
 
 
-@blueprint.route("/<nome>/delete_file/<filename>", methods=["POST"])
+@blueprint.route("/<nome>/delete_file/<path:filename>", methods=["POST"])
 def delete_file(nome: str, filename: str) -> str:
     """Delete a specific file from a motor entry.
 
     Args:
         nome: Motor name.
-        filename: File to delete.
+        filename: File to delete (pode incluir subpasta).
 
     Returns:
         str: Redirect to the motor detail page.
     """
     nome = _safe_filename(nome)
-    filename = _safe_filename(filename)
 
     if get_motor(nome) is None:
         abort(404)
 
     motor_dir = LIBRARY_DIR / nome
-    file_path = motor_dir / filename
+    file_path = (motor_dir / filename).resolve()
+    motor_root = motor_dir.resolve()
+    if not str(file_path).startswith(str(motor_root)):
+        abort(404)
 
     if file_path.exists():
         file_path.unlink()
@@ -324,6 +330,83 @@ def update_notes(nome: str):
     save_motor_metadata(nome, motor)
 
     return jsonify({"success": True})
+
+
+@blueprint.route("/<nome>/opcoes", methods=["POST"])
+def update_opcoes(nome: str) -> str:
+    """Atualiza as opções de títulos dos gráficos/PDF do motor.
+
+    Lê os campos de formulário definidos em :data:`TITULOS_CAMPOS`, persiste
+    no ``motor.json`` e regenera o relatório (PDF + PNGs avulsos) com os novos
+    títulos — no mesmo formato da pasta ``relatorios`` (``graficos/``,
+    ``dados/`` e ``{nome}.pdf``).
+
+    Args:
+        nome: Motor name.
+
+    Returns:
+        str: Redirect to the motor detail page.
+
+    Raises:
+        404: If the motor does not exist.
+    """
+    nome = _safe_filename(nome)
+    motor = get_motor(nome)
+    if motor is None:
+        abort(404)
+
+    titulos = {
+        key: request.form.get(key, "").strip() for key, _ in TITULOS_CAMPOS
+    }
+    titulos = {k: v for k, v in titulos.items() if v}
+    motor.graficos_titulos = titulos or None
+    save_motor_metadata(nome, motor)
+
+    try:
+        from backend.analises import motor_analisys
+
+        fonte = LIBRARY_DIR / nome / "dados" / f"{nome}_dados.csv"
+        if not fonte.exists():
+            flash(
+                "Opções salvas, mas não há dados salvos para regenerar o relatório. "
+                "Envie o teste pela página de Análises primeiro.",
+                "warning",
+            )
+            return redirect(url_for("biblioteca.detalhe", nome=nome))
+
+        motor_obj = motor_analisys.__new__(motor_analisys)
+        motor_obj.df = _read_saved_data(fonte)
+        motor_obj.df_result = None
+        motor_obj.get_result()
+        motor_obj.save_analisys(nome, titulos=titulos)
+        flash("Opções salvas e relatório regenerado com sucesso!", "success")
+    except Exception as exc:  # pylint: disable=broad-except
+        flash(f"Opções salvas, mas erro ao regenerar relatório: {exc}", "warning")
+
+    return redirect(url_for("biblioteca.detalhe", nome=nome))
+
+
+def _read_saved_data(path) -> object:
+    """Relê o CSV salvo pela análise, preservando as colunas de origem.
+
+    O CSV ``{nome}_dados.csv`` é gravado pela ``save_analisys`` e mantém as
+    colunas brutas ``Tempo``/``Empuxo``/``Pressao`` além das derivadas
+    (``Empuxo_N`` etc.). Para não reaplicar a conversão de unidades já feita,
+    reconstruímos o objeto ``motor_analisys`` diretamente com esse DataFrame.
+
+    Args:
+        path: Caminho do CSV salvo (separador ``;``).
+
+    Returns:
+        pandas.DataFrame: DataFrame com as colunas da análise.
+    """
+    import pandas as pd
+
+    raw = pd.read_csv(path, sep=";")
+    required = {"Tempo", "Empuxo", "Pressao"}
+    if not required.issubset(raw.columns):
+        raise ValueError("Arquivo de dados não contém as colunas esperadas.")
+    return raw
 
 
 @blueprint.route("/migrate", methods=["POST"])

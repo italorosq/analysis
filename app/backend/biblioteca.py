@@ -48,6 +48,8 @@ class MotorMetadata:
         openmotor_dados: Parsed data from the .eng file (dict).
         fotos: List of photo filenames.
         notas: Free-form notes field.
+        graficos_titulos: Custom chart/PDF titles (keys from the
+            ``DEFAULT_TITULOS`` dict in :mod:`backend.analises`).
     """
 
     nome: str
@@ -69,6 +71,7 @@ class MotorMetadata:
     openmotor_dados: dict | None = None
     fotos: list[str] = field(default_factory=list)
     notas: str = ""
+    graficos_titulos: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -227,23 +230,39 @@ def list_files(nome: str) -> dict[str, list[str]]:
     for f in sorted(motor_dir.iterdir()):
         if f.name == "motor.json":
             continue
-        if not f.is_file():
+        if f.is_dir():
+            # Pastas no formato "relatorios" (graficos/ e dados/),
+            # prefixando a categoria com a subpasta.
+            for sub in sorted(f.iterdir()):
+                if not sub.is_file():
+                    continue
+                _classify(file=f"{f.name}/{sub.name}", result=result)
             continue
-        ext = f.suffix.lower()
-        if ext == ".csv":
-            result["csv"].append(f.name)
-        elif ext == ".png":
-            result["png"].append(f.name)
-        elif ext == ".pdf":
-            result["pdf"].append(f.name)
-        elif ext == ".eng":
-            result["eng"].append(f.name)
-        elif ext in (".jpg", ".jpeg"):
-            result["fotos"].append(f.name)
-        else:
-            result["outros"].append(f.name)
+        _classify(file=f.name, result=result)
 
     return result
+
+
+def _classify(file: str, result: dict[str, list[str]]) -> None:
+    """Adiciona um arquivo à categoria correta de :func:`list_files`.
+
+    Args:
+        file: Nome do arquivo (pode incluir subpasta, ex.: ``graficos/x.png``).
+        result: Dicionário de categorias a preencher.
+    """
+    ext = Path(file).suffix.lower()
+    if ext == ".csv":
+        result["csv"].append(file)
+    elif ext == ".png":
+        result["png"].append(file)
+    elif ext == ".pdf":
+        result["pdf"].append(file)
+    elif ext == ".eng":
+        result["eng"].append(file)
+    elif ext in (".jpg", ".jpeg"):
+        result["fotos"].append(file)
+    else:
+        result["outros"].append(file)
 
 
 def register_file(nome: str, filename: str, category: str) -> None:
