@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Salvar Relatório - Serra Rocketry{% endblock %}
+{% block page_title %}Salvar Relatório{% endblock %}
+{% block content %}
+<div class="save-page">
+  <section class="page-header save-hero">
+    <div>
+      <span class="eyebrow">EXPORT WORKSPACE</span>
+      <h2>Prepare your report</h2>
+      <p>Escolha o nome, revise os títulos e gere todos os arquivos em uma única etapa.</p>
+    </div>
+    <div class="save-status {% if result %}ready{% endif %}">
+      <span class="status-dot"></span>
+      {% if result %}Analysis ready{% else %}Waiting for analysis{% endif %}
+    </div>
+  </section>
+
+  {% if saved %}
+  <div class="save-success">
+    <strong>Relatório salvo.</strong> PDF, gráficos PNG e dados CSV foram gerados na biblioteca.
+  </div>
+  {% endif %}
+
+  {% if not result %}
+  <section class="empty-save card">
+    <div class="empty-save-icon">↗</div>
+    <h3>Nenhuma análise pronta para salvar</h3>
+    <p>Envie um arquivo na aba Análises. Quando o processamento terminar, volte aqui para exportar o relatório.</p>
+    <a class="btn btn-primary" href="{{ url_for('page.analise') }}">Ir para Análises</a>
+  </section>
+  {% else %}
+  <form action="{{ url_for('page.save_motor') }}" method="POST" id="save-report-form">
+    <div class="save-layout">
+      <main class="save-main">
+        <section class="card report-overview">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">01 / IDENTIFICATION</span>
+              <h3>Nome do relatório</h3>
+            </div>
+            <span class="section-number">01</span>
+          </div>
+          <label class="field-label" for="name">Nome do motor ou ensaio</label>
+          <input class="save-input name-input" type="text" name="name" id="name"
+                 value="{{ name }}" placeholder="Ex.: SR1500_Test_A" required />
+          <p class="field-hint">Esse nome será usado na pasta, no PDF e nos arquivos exportados.</p>
+        </section>
+
+        <section class="card title-editor">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">02 / CUSTOMIZATION</span>
+              <h3>Titles & labels</h3>
+            </div>
+            <span class="section-number">02</span>
+          </div>
+          <p class="section-copy">Os valores começam em inglês, mas cada campo pode ser alterado livremente antes de salvar.</p>
+
+          <div class="title-groups">
+            <div class="title-group">
+              <h4>Report structure</h4>
+              {% for key, label in titulo_campos if key in ['pdf_titulo', 'secao_combinado', 'secao_forca', 'secao_impulso', 'secao_spline'] %}
+              <label class="title-field">
+                <span>{{ label }}</span>
+                <input type="text" name="{{ key }}" value="{{ titulos_atuais.get(key, '') }}"
+                       data-preview="{{ key }}" />
+              </label>
+              {% endfor %}
+            </div>
+            <div class="title-group">
+              <h4>Chart titles</h4>
+              {% for key, label in titulo_campos if key in ['grafico_forca', 'grafico_impulso', 'grafico_spline', 'grafico_empuxo', 'grafico_pressao'] %}
+              <label class="title-field">
+                <span>{{ label }}</span>
+                <input type="text" name="{{ key }}" value="{{ titulos_atuais.get(key, '') }}"
+                       data-preview="{{ key }}" />
+              </label>
+              {% endfor %}
+            </div>
+            <div class="title-group">
+              <h4>Axis labels</h4>
+              {% for key, label in titulo_campos if key in ['rotulo_tempo', 'rotulo_empuxo', 'rotulo_pressao', 'rotulo_impulso'] %}
+              <label class="title-field">
+                <span>{{ label }}</span>
+                <input type="text" name="{{ key }}" value="{{ titulos_atuais.get(key, '') }}"
+                       data-preview="{{ key }}" />
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <aside class="save-sidebar">
+        <section class="card live-preview">
+          <div class="section-heading compact">
+            <div>
+              <span class="eyebrow">LIVE PREVIEW</span>
+              <h3 id="preview-pdf">{{ titulos_atuais.get('pdf_titulo') }}</h3>
+            </div>
+            <span class="preview-live">LIVE</span>
+          </div>
+          <div class="preview-sheet">
+            <div class="preview-sheet-bar"></div>
+            <strong id="preview-combined">{{ titulos_atuais.get('secao_combinado') }}</strong>
+            <span id="preview-force">{{ titulos_atuais.get('secao_forca') }}</span>
+            <span id="preview-impulse">{{ titulos_atuais.get('secao_impulso') }}</span>
+            <span id="preview-spline">{{ titulos_atuais.get('secao_spline') }}</span>
+          </div>
+          <p class="field-hint">A prévia mostra os títulos que aparecerão nas seções do PDF.</p>
+        </section>
+
+        <section class="card package-card">
+          <div class="section-heading compact">
+            <div>
+              <span class="eyebrow">03 / OUTPUT</span>
+              <h3>Export package</h3>
+            </div>
+          </div>
+          <ul class="output-list">
+            <li><span class="output-icon pdf">PDF</span><span><strong>Complete report</strong><small>Metrics + 4 charts</small></span></li>
+            <li><span class="output-icon png">PNG</span><span><strong>4 standalone charts</strong><small>Força, impulso, combinado, spline</small></span></li>
+            <li><span class="output-icon csv">CSV</span><span><strong>2 data files</strong><small>Raw/derived data + results</small></span></li>
+          </ul>
+          <button class="btn btn-primary save-submit" type="submit"><span>↳</span> Generate report</button>
+          <a class="back-analysis" href="{{ url_for('page.analise') }}">← Process another file</a>
+        </section>
+      </aside>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const previewMap = {
+    pdf_titulo: 'preview-pdf',
+    secao_combinado: 'preview-combined',
+    secao_forca: 'preview-force',
+    secao_impulso: 'preview-impulse',
+    secao_spline: 'preview-spline'
+  };
+  document.querySelectorAll('[data-preview]').forEach((input) => {
+    input.addEventListener('input', () => {
+      const target = document.getElementById(previewMap[input.dataset.preview]);
+      if (target) target.textContent = input.value || 'Untitled';
+    });
+  });
+
+  const form = document.getElementById('save-report-form');
+  if (form) {
+    form.addEventListener('submit', () => {
+      const button = form.querySelector('.save-submit');
+      button.disabled = true;
+      button.innerHTML = '<span class="save-spinner"></span> Generating...';
+    });
+  }
+</script>
+{% endblock %}
