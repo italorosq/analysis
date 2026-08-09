@@ -71,28 +71,76 @@
 <script>
   // Thrust chart
   const thrustLabels = {{x|safe}};
+  const thrustY = {{y|safe}};
+
+  // Encontra pico para anotação e zoom
+  const peakIdx = thrustY.indexOf(Math.max(...thrustY));
+  const peakT = thrustLabels[peakIdx];
+  const peakF = thrustY[peakIdx];
+  const thrZoom = peakF * 0.02;
+  let zoomStart = 0, zoomEnd = thrustLabels.length - 1;
+  for (let i = 0; i < thrustY.length; i++) {
+    if (thrustY[i] >= thrZoom) { zoomStart = i; break; }
+  }
+  for (let i = thrustY.length - 1; i >= 0; i--) {
+    if (thrustY[i] >= thrZoom) { zoomEnd = i; break; }
+  }
+  const xMin = thrustLabels[Math.max(0, zoomStart - 2)];
+  const xMax = thrustLabels[Math.min(thrustLabels.length - 1, zoomEnd + 2)];
+
   const thrustChart = new Chart(document.getElementById('thrustChart'), {
     type: 'line',
     data: {
       labels: thrustLabels,
-      datasets: [{
-        label: 'Empuxo (N)',
-        backgroundColor: 'rgba(0, 33, 150, 0.1)',
-        borderColor: '#002196',
-        borderWidth: 2,
-        data: {{y|safe}},
-        fill: true,
-        tension: 0.3
-      }]
+      datasets: [
+        {
+          label: 'Bruto (N)',
+          borderColor: '#a0a8c0',
+          borderWidth: 1,
+          data: thrustY,
+          fill: false,
+          tension: 0.1,
+          pointRadius: 0,
+          order: 2
+        },
+        {
+          label: 'Suavizado (N)',
+          backgroundColor: 'rgba(0, 33, 150, 0.12)',
+          borderColor: '#002196',
+          borderWidth: 2.5,
+          data: thrustY.map((v, i) => {
+            const w = 7, half = Math.floor(w / 2);
+            let sum = 0, cnt = 0;
+            for (let j = i - half; j <= i + half; j++) {
+              if (j >= 0 && j < thrustY.length) { sum += thrustY[j]; cnt++; }
+            }
+            return sum / cnt;
+          }),
+          fill: true,
+          tension: 0.3,
+          pointRadius: 0,
+          order: 1
+        },
+        {
+          label: 'Pico',
+          data: thrustY.map((v, i) => i === peakIdx ? v : null),
+          borderColor: '#e63946',
+          backgroundColor: '#e63946',
+          pointRadius: 6,
+          pointHoverRadius: 8,
+          showLine: false,
+          order: 0
+        }
+      ]
     },
     options: {
       maintainAspectRatio: false,
       responsive: true,
       interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: true, position: 'top' } },
+      plugins: { legend: { display: true, position: 'top', labels: { font: { weight: 'bold' } } } },
       scales: {
-        x: { ticks: { color: '#000423' }, title: { display: true, text: 'Tempo [s]', color: '#000423' } },
-        y: { ticks: { color: '#000423' }, title: { display: true, text: 'Empuxo [N]', color: '#000423' } }
+        x: { ticks: { color: '#000423', maxTicksLimit: 12 }, title: { display: true, text: 'Tempo [s]', color: '#000423', font: { weight: 'bold' } }, min: xMin, max: xMax },
+        y: { ticks: { color: '#000423' }, title: { display: true, text: 'Empuxo [N]', color: '#000423', font: { weight: 'bold' } }, beginAtZero: true }
       }
     }
   });
@@ -106,20 +154,21 @@
         label: 'Pressão (MPa)',
         backgroundColor: 'rgba(0, 100, 200, 0.1)',
         borderColor: '#0064C8',
-        borderWidth: 2,
+        borderWidth: 2.5,
         data: {{y_pressure|safe}},
         fill: true,
-        tension: 0.3
+        tension: 0.3,
+        pointRadius: 0
       }]
     },
     options: {
       maintainAspectRatio: false,
       responsive: true,
       interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: true, position: 'top' } },
+      plugins: { legend: { display: true, position: 'top', labels: { font: { weight: 'bold' } } } },
       scales: {
-        x: { ticks: { color: '#000423' }, title: { display: true, text: 'Tempo [s]', color: '#000423' } },
-        y: { ticks: { color: '#000423' }, title: { display: true, text: 'Pressão [MPa]', color: '#000423' } }
+        x: { ticks: { color: '#000423', maxTicksLimit: 12 }, title: { display: true, text: 'Tempo [s]', color: '#000423', font: { weight: 'bold' } }, min: xMin, max: xMax },
+        y: { ticks: { color: '#000423' }, title: { display: true, text: 'Pressão [MPa]', color: '#000423', font: { weight: 'bold' } } }
       }
     }
   });
