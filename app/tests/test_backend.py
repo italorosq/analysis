@@ -1,4 +1,4 @@
-﻿"""
+"""
 Pytest suite for the rocketry analysis backend.
 
 Modules under test (in app/backend/):
@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless backend, no display needed
 
 import pytest
@@ -24,9 +25,8 @@ APP_ROOT = Path(__file__).resolve().parent.parent
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
-from backend.analises import motor_analisys  # noqa: E402
-from backend.tratamento import active_motor_window, data_treatment  # noqa: E402
-
+from backend.analises import motor_analisys
+from backend.tratamento import active_motor_window, data_treatment
 
 # --------------------------------------------------------------------------- #
 # Fixtures
@@ -412,8 +412,8 @@ def test_active_motor_window_margin():
 # --------------------------------------------------------------------------- #
 def test_remove_outliers_preserves_burn_peak():
     """O filtro Hampel deve remover spikes isolados mas manter o pico real."""
-    import pandas as pd
     import numpy as np
+    import pandas as pd
 
     n = 300
     t = np.arange(n) * 0.1
@@ -485,8 +485,8 @@ def test_save_analisys_writes_all_avulso(analysis, tmp_path):
 # default_filter_threshold
 # --------------------------------------------------------------------------- #
 def test_default_filter_threshold_robust():
-    from backend.tratamento import default_filter_threshold
     import pandas as pd
+    from backend.tratamento import default_filter_threshold
 
     # Série com spike de saturação + queima sustentada.
     thrust = pd.Series([0.0] * 100 + [50.0] * 100 + [0.0] * 100)
@@ -497,3 +497,69 @@ def test_default_filter_threshold_robust():
     # O limiar deve ser baixo (fração do P95 limpo), não a média (que seria ~16).
     assert thr < 10.0
     assert thr > 0.0
+
+
+# --------------------------------------------------------------------------- #
+# backend.deps: fail-fast de dependências
+# --------------------------------------------------------------------------- #
+def test_deps_all_present():
+    """Com as dependências instaladas (ambiente de teste), nada deve faltar."""
+    from backend.deps import find_missing_dependencies
+
+    assert find_missing_dependencies() == []
+
+
+def test_deps_detects_missing(monkeypatch):
+    """Módulo ausente -> detectado e compilado na mensagem."""
+    import importlib.util
+
+    from backend.deps import (
+        INSTALL_COMMAND,
+        find_missing_dependencies,
+        missing_dependencies_message,
+    )
+
+    real_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: None if name == "reportlab" else real_find_spec(name),
+    )
+
+    missing = find_missing_dependencies()
+    assert "reportlab" in missing
+    assert "matplotlib" not in missing
+
+    msg = missing_dependencies_message(["reportlab"])
+    assert "reportlab" in msg
+    assert "relatório PDF" in msg
+    assert INSTALL_COMMAND in msg
+
+
+def test_deps_subset(monkeypatch):
+    """Checar só 'reportlab' deve ignorar os demais módulos."""
+    import importlib.util
+
+    from backend.deps import find_missing_dependencies
+
+    real_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: None if name == "scipy" else real_find_spec(name),
+    )
+    assert find_missing_dependencies(["reportlab"]) == []
+    assert find_missing_dependencies(["scipy"]) == ["scipy"]
+
+
+def test_ensure_dependencies_raises(monkeypatch):
+    import importlib.util
+
+    from backend.deps import ensure_dependencies
+
+    real_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util, "find_spec", lambda name: None if name == "reportlab" else real_find_spec(name)
+    )
+    with pytest.raises(RuntimeError, match="reportlab"):
+        ensure_dependencies()

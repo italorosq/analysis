@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from backend import motor_analisys  # noqa: E402  # pylint: disable=wrong-import-position
+from backend.deps import ensure_dependencies  # pylint: disable=wrong-import-position
 
 
 # ANSI colors (disabled automatically when output is not a TTY)
@@ -143,6 +144,15 @@ def analyze(csv_path, as_json=False, save=None, no_color=False, units="kg", remo
         _print_report(csv_path, result, df, outliers_removed)
 
     if save:
+        try:
+            ensure_dependencies(["matplotlib", "reportlab"])
+        except RuntimeError as e:
+            print(
+                f"{C.RED}Não foi possível salvar a análise completa.{C.RESET}",
+                file=sys.stderr,
+            )
+            print(f"{C.DIM}{e}{C.RESET}", file=sys.stderr)
+            return 1
         motor.save_analisys(save, output_dir=out_dir)
         if not as_json:
             print(

@@ -23,6 +23,7 @@ from pathlib import Path
 
 from backend import data_treatment, motor_analisys
 from backend.analises import TITULOS_CAMPOS
+from backend.deps import ensure_dependencies
 from backend.tratamento import default_filter_threshold
 from flask import Blueprint, Flask, jsonify, redirect, render_template, request, session, url_for
 
@@ -550,7 +551,13 @@ def create_app() -> Flask:
 
     Returns:
         Flask: Instância da aplicação pronta para uso.
+
+    Raises:
+        RuntimeError: Se dependências do projeto (ex. ``reportlab``) não
+            estiverem instaladas — mensagem com o comando de instalação.
     """
+    ensure_dependencies()
+
     app = Flask(__name__)
     app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
     app.config["MAX_CONTENT_LENGTH"] = _MAX_CONTENT_LENGTH
