@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless backend, no display needed
 
 import pytest
@@ -24,10 +25,8 @@ APP_ROOT = Path(__file__).resolve().parent.parent
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
-from backend.analises import motor_analisys  # noqa: E402
-from backend.tratamento import data_treatment  # noqa: E402
-from app import _active_motor_window  # noqa: E402
-
+from backend.analises import motor_analisys
+from backend.tratamento import active_motor_window, data_treatment
 
 # --------------------------------------------------------------------------- #
 # Fixtures
@@ -138,7 +137,9 @@ def test_get_result_values(analysis):
     assert r["Impulso [N*s]"] > 0
     assert r["Empuxo max [N]"] > r["Empuxo medio [N]"]
     assert r["Duracao [s]"] > 0
-    assert r["Pontos amostrais"] == len(analysis.get_data())
+    # Métricas são calculadas sobre a janela ativa da queima (recorte robusto),
+    # que é um subconjunto do DataFrame completo.
+    assert 0 < r["Pontos amostrais"] <= len(analysis.get_data())
     assert r["Pressao max [MPa]"] > 0
 
 
@@ -153,6 +154,22 @@ def test_empuxo_max_matches_dataframe(analysis):
     df = analysis.get_data()
     r = analysis.get_result()
     assert r["Empuxo max [N]"] == pytest.approx(df["Empuxo_N"].max(), abs=1e-4)
+
+
+def test_get_result_is_json_serializable(analysis):
+    """O resultado precisa ser serializável (ex.: sessão Flask/cookie).
+
+    Valores ``numpy`` (np.float64/np.int64) quebram a serialização da sessão
+    e impedem o salvamento do relatório na web.
+    """
+    import json
+
+    r = analysis.get_result()
+    payload = json.dumps(r, ensure_ascii=False)
+    assert json.loads(payload) == r
+    for v in r.values():
+        assert isinstance(v, (int, float, str))
+
 
 
 # --------------------------------------------------------------------------- #
@@ -211,10 +228,30 @@ def test_pdf_writes_file(analysis, tmp_path):
 def test_save_analisys_writes_outputs(analysis, tmp_path):
     out_dir = tmp_path / "save"
     analysis.save_analisys("UnitTestMotor", out_dir)
-    assert (out_dir / "UnitTestMotor_resultados.csv").exists()
-    assert (out_dir / "UnitTestMotor_dados.csv").exists()
-    assert (out_dir / "UnitTestMotor_grafico.png").exists()
+    assert (out_dir / "dados" / "UnitTestMotor_resultados.csv").exists()
+    assert (out_dir / "dados" / "UnitTestMotor_dados.csv").exists()
+    assert (out_dir / "graficos" / "UnitTestMotor_grafico.png").exists()
     assert (out_dir / "UnitTestMotor.pdf").exists()
+
+
+def test_save_analisys_accepts_custom_curve_legends(analysis, tmp_path):
+    out_dir = tmp_path / "custom_legends"
+    analysis.save_analisys(
+        "LegendMotor",
+        out_dir,
+        titulos={
+            "legenda_bruto": "Raw load cell",
+            "legenda_suavizado": "Filtered load cell",
+            "legenda_pico": "Maximum thrust",
+            "legenda_area_impulso": "Integrated impulse",
+            "legenda_impulso_acumulado": "Impulse history",
+            "legenda_pontos_brutos": "Measured points",
+            "legenda_media_movel": "Moving average",
+            "legenda_spline": "Spline fit",
+        },
+    )
+    assert (out_dir / "LegendMotor.pdf").exists()
+    assert (out_dir / "graficos" / "LegendMotor_spline.png").exists()
 
 
 # --------------------------------------------------------------------------- #
@@ -291,7 +328,7 @@ def test_save_treatment_writes_file(treatment, tmp_path):
 def test_active_motor_window_trims_idle_segments():
     import pandas as pd
 
-    # Longo período de coleta ociosa antes/depois da queima.
+    # Longo perÃ­odo de coleta ociosa antes/depois da queima.
     df = pd.DataFrame(
         {
             "Tempo_rel": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -300,7 +337,7 @@ def test_active_motor_window_trims_idle_segments():
         }
     )
 
-    window = _active_motor_window(df)
+    window = active_motor_window(df)
 
     # Com margem de 2 amostras, espera-se manter o intervalo [1, 7].
     assert len(window) == 7
@@ -320,5 +357,209 @@ def test_active_motor_window_fallback_when_no_activity():
         }
     )
 
-    window = _active_motor_window(df)
+    window = active_motor_window(df)
     assert len(window) == len(df)
+
+
+# --------------------------------------------------------------------------- #
+# Janela robusta com spikes (preserva queima real)
+# --------------------------------------------------------------------------- #
+def test_active_motor_window_preserves_burn_with_spikes():
+    """A janela deve manter o bloco de maior impulso (queima real), não o spike."""
+    import pandas as pd
+
+    # Ruído pré/queima/pós/satélite: spike de saturação isolado + queima sustentada.
+    n = 200
+    t = [i * 0.1 for i in range(n)]
+    thrust = [0.0] * n  # ruído zero
+    for i in range(60, 150):
+        thrust[i] = 10.0 + 5.0 * ((i - 60) / 90)  # queima sustentada 10-15 N
+    thrust[30] = 5000.0  # spike isolado (1 ponto)
+    thrust[31] = 5000.0  # spike vizinho (2 pontos)
+    df = pd.DataFrame({"Tempo_rel": t, "Empuxo_N": thrust, "Pressao_MPa": [0.0] * n})
+
+    window = active_motor_window(df)
+
+    # Deve manter a queima (t≈6-15s original), NÃO o spike (t≈3s).
+    # O Tempo_rel é re-zerado no início da janela.
+    assert window["Tempo_rel"].iloc[0] == pytest.approx(0.0, abs=1e-9)
+    # A janela deve abranger a queima (originalmente t=6-15s → ~9s de duração).
+    assert window["Tempo_rel"].max() > 8.0
+    # O spike de 5000 N NÃO deve estar na janela (filtrado pelo Hampel).
+    assert (window["Empuxo_N"] < 100).all()
+    # O pico da queima (10-15 N) deve estar presente.
+    assert window["Empuxo_N"].max() > 10.0
+
+
+def test_active_motor_window_margin():
+    """Margem de ±2 amostras deve ser aplicada corretamente."""
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {
+            "Tempo_rel": list(range(20)),
+            "Empuxo_N": [0.0] * 5 + [20.0] * 10 + [0.0] * 5,
+            "Pressao_MPa": [0.0] * 20,
+        }
+    )
+    window = active_motor_window(df, margin=2)
+    # Margem: 2 antes + 10 burn + 2 depois = 14 pontos.
+    assert len(window) == 14
+
+
+# --------------------------------------------------------------------------- #
+# remove_outliers preserva pico da queima
+# --------------------------------------------------------------------------- #
+def test_remove_outliers_preserves_burn_peak():
+    """O filtro Hampel deve remover spikes isolados mas manter o pico real."""
+    import numpy as np
+    import pandas as pd
+
+    n = 300
+    t = np.arange(n) * 0.1
+    thrust = np.random.default_rng(42).normal(0, 0.5, n)
+    # Injeta queima sustentada (t=10-20s) pico 50 N.
+    for i in range(100, 200):
+        thrust[i] = 50.0 - 0.2 * (i - 100)
+    # Injeta spike isolado em t=5s = 900 N.
+    thrust[50] = 900.0
+
+    df = pd.DataFrame(
+        {
+            "Tempo": (t * 1000).astype(int),
+            "Empuxo": thrust,
+            "Pressao": [0.0] * n,
+        }
+    )
+
+    from backend.analises import motor_analisys
+
+    m = motor_analisys.__new__(motor_analisys)
+    m.df = df.copy()
+    m.df["Empuxo_N"] = pd.Series(thrust, dtype=float)
+    m.df["Tempo_s"] = pd.Series(t)
+    m.df["Pressao_MPa"] = pd.Series([0.0] * n)
+    m.df["Tempo_rel"] = pd.Series(t) - t[0]
+    m.df_result = None
+
+    n_out = m.remove_outliers()
+
+    assert n_out >= 1  # spike removido
+    assert m.df["Empuxo_N"].max() > 40  # pico da queima (~50) preservado
+
+
+# --------------------------------------------------------------------------- #
+# Novos gráficos avulso
+# --------------------------------------------------------------------------- #
+def test_plot_force_time_writes_png(analysis, tmp_path):
+    path = analysis.plot_force_time("TestMotor", tmp_path)
+    assert Path(path).exists()
+    assert Path(path).suffix == ".png"
+    assert Path(path).stat().st_size > 0
+
+
+def test_plot_impulse_time_writes_png(analysis, tmp_path):
+    path = analysis.plot_impulse_time("TestMotor", tmp_path)
+    assert Path(path).exists()
+    assert Path(path).stat().st_size > 0
+
+
+def test_plot_spline_writes_png(analysis, tmp_path):
+    path = analysis.plot_spline("TestMotor", tmp_path)
+    assert Path(path).exists()
+    assert Path(path).stat().st_size > 0
+
+
+def test_save_analisys_writes_all_avulso(analysis, tmp_path):
+    analysis.save_analisys("UnitTestMotor", tmp_path)
+    graficos = tmp_path / "graficos"
+    dados = tmp_path / "dados"
+    for suffix in ["_grafico.png", "_forca_tempo.png", "_impulso_tempo.png", "_spline.png"]:
+        assert (graficos / f"UnitTestMotor{suffix}").exists(), f"Faltou grafico: {suffix}"
+    for suffix in ["_resultados.csv", "_dados.csv"]:
+        assert (dados / f"UnitTestMotor{suffix}").exists(), f"Faltou csv: {suffix}"
+    assert (tmp_path / "UnitTestMotor.pdf").exists()
+
+
+# --------------------------------------------------------------------------- #
+# default_filter_threshold
+# --------------------------------------------------------------------------- #
+def test_default_filter_threshold_robust():
+    import pandas as pd
+    from backend.tratamento import default_filter_threshold
+
+    # Série com spike de saturação + queima sustentada.
+    thrust = pd.Series([0.0] * 100 + [50.0] * 100 + [0.0] * 100)
+    thrust.iloc[5] = 9000.0  # spike
+    df = pd.DataFrame({"Empuxo_N": thrust})
+    thr = default_filter_threshold(df)
+
+    # O limiar deve ser baixo (fração do P95 limpo), não a média (que seria ~16).
+    assert thr < 10.0
+    assert thr > 0.0
+
+
+# --------------------------------------------------------------------------- #
+# backend.deps: fail-fast de dependências
+# --------------------------------------------------------------------------- #
+def test_deps_all_present():
+    """Com as dependências instaladas (ambiente de teste), nada deve faltar."""
+    from backend.deps import find_missing_dependencies
+
+    assert find_missing_dependencies() == []
+
+
+def test_deps_detects_missing(monkeypatch):
+    """Módulo ausente -> detectado e compilado na mensagem."""
+    import importlib.util
+
+    from backend.deps import (
+        INSTALL_COMMAND,
+        find_missing_dependencies,
+        missing_dependencies_message,
+    )
+
+    real_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: None if name == "reportlab" else real_find_spec(name),
+    )
+
+    missing = find_missing_dependencies()
+    assert "reportlab" in missing
+    assert "matplotlib" not in missing
+
+    msg = missing_dependencies_message(["reportlab"])
+    assert "reportlab" in msg
+    assert "relatório PDF" in msg
+    assert INSTALL_COMMAND in msg
+
+
+def test_deps_subset(monkeypatch):
+    """Checar só 'reportlab' deve ignorar os demais módulos."""
+    import importlib.util
+
+    from backend.deps import find_missing_dependencies
+
+    real_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: None if name == "scipy" else real_find_spec(name),
+    )
+    assert find_missing_dependencies(["reportlab"]) == []
+    assert find_missing_dependencies(["scipy"]) == ["scipy"]
+
+
+def test_ensure_dependencies_raises(monkeypatch):
+    import importlib.util
+
+    from backend.deps import ensure_dependencies
+
+    real_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util, "find_spec", lambda name: None if name == "reportlab" else real_find_spec(name)
+    )
+    with pytest.raises(RuntimeError, match="reportlab"):
+        ensure_dependencies()

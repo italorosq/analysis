@@ -1,0 +1,111 @@
+<div class="te-editor" id="te-editor">
+  <div class="te-preview">
+    <div class="te-preview-head">
+      <span class="eyebrow">Preview ao vivo</span>
+      <span class="te-live">LIVE</span>
+    </div>
+    <div class="te-preview-doc">
+      <div class="te-pv-title" id="te-pv-pdf_titulo">{{ titulos_atuais.get('pdf_titulo', '') }}</div>
+      <div class="te-pv-sections">
+        <div class="te-pv-sec" id="te-pv-secao_combinado">{{ titulos_atuais.get('secao_combinado', '') }}</div>
+        <div class="te-pv-sec" id="te-pv-secao_forca">{{ titulos_atuais.get('secao_forca', '') }}</div>
+        <div class="te-pv-sec" id="te-pv-secao_impulso">{{ titulos_atuais.get('secao_impulso', '') }}</div>
+        <div class="te-pv-sec" id="te-pv-secao_spline">{{ titulos_atuais.get('secao_spline', '') }}</div>
+      </div>
+      <div class="te-pv-axes">
+        <span class="te-pv-token" id="te-pv-rotulo_tempo">{{ titulos_atuais.get('rotulo_tempo', '') }}</span>
+        <span class="te-pv-token" id="te-pv-rotulo_empuxo">{{ titulos_atuais.get('rotulo_empuxo', '') }}</span>
+        <span class="te-pv-token" id="te-pv-rotulo_pressao">{{ titulos_atuais.get('rotulo_pressao', '') }}</span>
+        <span class="te-pv-token" id="te-pv-rotulo_impulso">{{ titulos_atuais.get('rotulo_impulso', '') }}</span>
+      </div>
+      <div class="te-pv-legends">
+        {% for key, _label in titulo_campos if key.startswith('legenda_') %}
+        <span class="te-pv-legend" id="te-pv-{{ key }}">{{ titulos_atuais.get(key, '') }}</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="te-toolbar">
+    <span class="te-count"><strong id="te-count">0</strong> campo(s) personalizado(s)</span>
+    <button type="button" class="btn btn-sm te-reset-all" id="te-reset-all">Resetar todos</button>
+  </div>
+
+  <div class="te-groups">
+    <details class="te-group" data-gid="g1" open>
+      <summary class="te-summary">
+        <span class="te-summary-title">Relatório (PDF)</span>
+        <span class="te-badge" data-badge="g1">0</span>
+      </summary>
+      <div class="te-fields g1">
+        {% for key, label in titulo_campos if key in ['pdf_titulo', 'secao_combinado', 'secao_forca', 'secao_impulso', 'secao_spline'] %}
+        <label class="te-field">
+          <span>{{ label }}</span>
+          <input type="text" name="{{ key }}" value="{{ titulos_atuais.get(key, '') }}"
+                 placeholder="{{ titulos_default.get(key, '') }}" data-te-key="{{ key }}" />
+        </label>
+        {% endfor %}
+      </div>
+      <div class="te-group-foot">
+        <button type="button" class="te-reset-group" data-reset-group="g1">Usar padrão neste grupo</button>
+      </div>
+    </details>
+
+    <details class="te-group" data-gid="g2">
+      <summary class="te-summary">
+        <span class="te-summary-title">Títulos dos gráficos</span>
+        <span class="te-badge" data-badge="g2">0</span>
+      </summary>
+      <div class="te-fields g2">
+        {% for key, label in titulo_campos if key in ['grafico_forca', 'grafico_impulso', 'grafico_spline', 'grafico_empuxo', 'grafico_pressao'] %}
+        <label class="te-field">
+          <span>{{ label }}</span>
+          <input type="text" name="{{ key }}" value="{{ titulos_atuais.get(key, '') }}"
+                 placeholder="{{ titulos_default.get(key, '') }}" data-te-key="{{ key }}" />
+        </label>
+        {% endfor %}
+      </div>
+      <div class="te-group-foot">
+        <button type="button" class="te-reset-group" data-reset-group="g2">Usar padrão neste grupo</button>
+      </div>
+    </details>
+
+    <details class="te-group" data-gid="g3">
+      <summary class="te-summary">
+        <span class="te-summary-title">Eixos dos gráficos</span>
+        <span class="te-badge" data-badge="g3">0</span>
+      </summary>
+      <div class="te-fields g3">
+        {% for key, label in titulo_campos if key in ['rotulo_tempo', 'rotulo_empuxo', 'rotulo_pressao', 'rotulo_impulso'] %}
+        <label class="te-field">
+          <span>{{ label }}</span>
+          <input type="text" name="{{ key }}" value="{{ titulos_atuais.get(key, '') }}"
+                 placeholder="{{ titulos_default.get(key, '') }}" data-te-key="{{ key }}" />
+        </label>
+        {% endfor %}
+      </div>
+      <div class="te-group-foot">
+        <button type="button" class="te-reset-group" data-reset-group="g3">Usar padrão neste grupo</button>
+      </div>
+    </details>
+
+    <details class="te-group" data-gid="g4">
+      <summary class="te-summary">
+        <span class="te-summary-title">Legendas das curvas</span>
+        <span class="te-badge" data-badge="g4">0</span>
+      </summary>
+      <div class="te-fields g4">
+        {% for key, label in titulo_campos if key.startswith('legenda_') %}
+        <label class="te-field">
+          <span>{{ label }}</span>
+          <input type="text" name="{{ key }}" value="{{ titulos_atuais.get(key, '') }}"
+                 placeholder="{{ titulos_default.get(key, '') }}" data-te-key="{{ key }}" />
+        </label>
+        {% endfor %}
+      </div>
+      <div class="te-group-foot">
+        <button type="button" class="te-reset-group" data-reset-group="g4">Usar padrão neste grupo</button>
+      </div>
+    </details>
+  </div>
+</div>

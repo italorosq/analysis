@@ -64,11 +64,38 @@ Dados completos com todas as colunas (originais + derivadas), separados por `;`.
 
 ### `{nome}_grafico.png`
 
-Figura com dois subplots (empuxo e pressão × tempo), 150 DPI.
+Figura combinada com dois subplots (empuxo e pressão × tempo), recortada na
+**janela ativa da queima** (recorte robusto a spikes) e com o pico de empuxo
+anotado. 150 DPI.
+
+### Gráficos avulsos (`{nome}_forca_tempo.png`, `{nome}_impulso_tempo.png`, `{nome}_spline.png`)
+
+Além do gráfico combinado, a análise gera **gráficos avulsos** individuais:
+
+* `{nome}_forca_tempo.png` — Força × Tempo (principal), com pico anotado e
+  área integrada (impulso) destacada;
+* `{nome}_impulso_tempo.png` — Impulso acumulado × Tempo (N·s);
+* `{nome}_spline.png` — Curva spline/suavizada sobreposta aos pontos brutos.
 
 ### `{nome}.pdf`
 
-Relatório completo gerado via ReportLab. Veja [backend.md](backend.md#pdf).
+Relatório completo gerado via ReportLab, agora com **todas** as seções de
+gráfico (combinado, Força × Tempo, Impulso acumulado e Spline). Veja
+[backend.md](backend.md#pdf).
+
+## Limpeza e recorte de dados
+
+O pipeline de análise agora usa algoritmos robustos a spikes de saturação do
+sensor (valores como ~980.000 no CSV bruto):
+
+* **Remoção de outliers** (`remove_outliers`): filtro Hampel (mediana rolante +
+  MAD local) com corte robusto global iterativo (P99×3). Remove apenas picos
+  isolados e rajadas de saturação, preservando platôs sustentados da queima.
+* **Janela ativa** (`active_motor_window`): detecta a queima pelo bloco de
+  **maior impulso acumulado**, com limiar derivado do sinal limpo — sem
+  descartar os dados reais da queima.
+* **Limiar padrão do tratamento**: percentil alto do sinal limpo (5% do P95),
+  em vez da média — que era inflada por spikes e removia toda a queima.
 
 ### `{nome}_processed.csv` (tratamento)
 

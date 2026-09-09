@@ -92,6 +92,24 @@ docker compose up --build
 
 > Defina a variável de ambiente `SECRET_KEY` em produção.
 
+## Solução de Problemas
+
+- **`Erro ao salvar: No module named 'xyz'`** (ou mensagem de dependência
+  ausente no startup do servidor): significa que o Python em uso não tem todas
+  as dependências do projeto. Instale-as no ambiente com que você inicia o app:
+
+  ```bash
+  pip install -r app/requirements.txt
+  ```
+
+  A aplicação também verifica isso ao iniciar (`create_app`) e falha com uma
+  mensagem clara antes do servidor subir — recomendado rodar sempre com o
+  venv do projeto ativado.
+
+- **CLI não salva o PDF** (`python app/cli.py teste.csv --save ...`): mesma
+  causa — falta de `reportlab`/`matplotlib` no Python em uso; a mensagem
+  indica o comando de instalação.
+
 ## Uso — CLI de Análise Rápida de Campo
 
 Para obter os principais insights de um teste rapidamente, sem subir o servidor:

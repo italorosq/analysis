@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Salvar Relatório - Serra Rocketry{% endblock %}
+{% block page_title %}Salvar Relatório{% endblock %}
+{% block content %}
+<div class="save-page">
+  <section class="page-header save-hero">
+    <div>
+      <span class="eyebrow">EXPORT WORKSPACE</span>
+      <h2>Prepare your report</h2>
+      <p>Escolha o nome, revise os títulos e gere todos os arquivos em uma única etapa.</p>
+    </div>
+    <div class="save-status {% if result %}ready{% endif %}">
+      <span class="status-dot"></span>
+      {% if result %}Analysis ready{% else %}Waiting for analysis{% endif %}
+    </div>
+  </section>
+
+  {% if saved %}
+  <div class="save-success">
+    <strong>Relatório salvo.</strong> PDF, gráficos PNG e dados CSV foram gerados na biblioteca.
+  </div>
+  {% endif %}
+
+  {% if not result %}
+  <section class="empty-save card">
+    <div class="empty-save-icon">↗</div>
+    <h3>Nenhuma análise pronta para salvar</h3>
+    <p>Envie um arquivo na aba Análises. Quando o processamento terminar, volte aqui para exportar o relatório.</p>
+    <a class="btn btn-primary" href="{{ url_for('page.analise') }}">Ir para Análises</a>
+  </section>
+  {% else %}
+  <form action="{{ url_for('page.save_motor') }}" method="POST" id="save-report-form">
+    <div class="save-layout">
+      <main class="save-main">
+        <section class="card report-overview">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">01 / IDENTIFICATION</span>
+              <h3>Nome do relatório</h3>
+            </div>
+            <span class="section-number">01</span>
+          </div>
+          <label class="field-label" for="name">Nome do motor ou ensaio</label>
+          <input class="save-input name-input" type="text" name="name" id="name"
+                 value="{{ name }}" placeholder="Ex.: SR1500_Test_A" required />
+          <p class="field-hint">Esse nome será usado na pasta, no PDF e nos arquivos exportados.</p>
+        </section>
+
+        <section class="card title-editor">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">02 / CUSTOMIZATION</span>
+              <h3>Titles & labels</h3>
+            </div>
+            <span class="section-number">02</span>
+          </div>
+          <p class="section-copy">Cada campo mostra em cinza o valor padrão, que pode ser alterado livremente. A prévia acima reage em tempo real.</p>
+          {% include "_titulos_editor.html" %}
+        </section>
+      </main>
+
+      <aside class="save-sidebar">
+        <section class="card package-card">
+          <div class="section-heading compact">
+            <div>
+              <span class="eyebrow">03 / OUTPUT</span>
+              <h3>Export package</h3>
+            </div>
+          </div>
+          <ul class="output-list">
+            <li><span class="output-icon pdf">PDF</span><span><strong>Complete report</strong><small>Metrics + 4 charts</small></span></li>
+            <li><span class="output-icon png">PNG</span><span><strong>4 standalone charts</strong><small>Força, impulso, combinado, spline</small></span></li>
+            <li><span class="output-icon csv">CSV</span><span><strong>2 data files</strong><small>Raw/derived data + results</small></span></li>
+          </ul>
+          <button class="btn btn-primary save-submit" type="submit"><span>↳</span> Generate report</button>
+          <a class="back-analysis" href="{{ url_for('page.analise') }}">← Process another file</a>
+        </section>
+      </aside>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const form = document.getElementById('save-report-form');
+  if (form) {
+    form.addEventListener('submit', () => {
+      const button = form.querySelector('.save-submit');
+      button.disabled = true;
+      button.innerHTML = '<span class="save-spinner"></span> Generating...';
+    });
+  }
+</script>
+{% endblock %}

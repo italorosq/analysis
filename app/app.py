@@ -21,9 +21,11 @@ Formato de dados:
 import os
 from pathlib import Path
 
-from flask import Flask, Blueprint, render_template, request, jsonify, session
-
-from backend import motor_analisys, data_treatment
+from backend import data_treatment, motor_analisys
+from backend.analises import TITULOS_CAMPOS
+from backend.deps import ensure_dependencies
+from backend.tratamento import default_filter_threshold
+from flask import Blueprint, Flask, jsonify, redirect, render_template, request, session, url_for
 
 # Nome do projeto — usado como prefixo de URL no blueprint
 project_name: str = "serra-rocketry"
@@ -35,9 +37,11 @@ BASE_DIR: Path = Path(__file__).parent
 DATA_DIR: Path = BASE_DIR / "data"
 MOTOR_RESULT_DIR: Path = DATA_DIR / "motor_result"
 DATA_TREATMENT_DIR: Path = DATA_DIR / "data_treatment"
+TMP_DIR: Path = DATA_DIR / "tmp"
 
 MOTOR_RESULT_DIR.mkdir(parents=True, exist_ok=True)
 DATA_TREATMENT_DIR.mkdir(parents=True, exist_ok=True)
+TMP_DIR.mkdir(parents=True, exist_ok=True)
 
 # Extensões de arquivo permitidas para upload
 ALLOWED_EXTENSIONS: set[str] = {"csv", "txt"}
@@ -47,66 +51,16 @@ _MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024
 
 
 def _active_motor_window(data):
-    """Extrai apenas o intervalo em que o motor está ativo.
+    """Extrai apenas o intervalo em que o motor está ativo (recorte robusto).
 
-    A janela ativa é detectada usando limiares baixos de empuxo e pressão
-    para ignorar períodos de pré/pós-teste em que a caixa continua gravando.
-    Se não houver uma janela confiável, retorna o DataFrame original.
+    Delega ao algoritmo robusto :func:`backend.tratamento.active_motor_window`,
+    que remove spikes isolados antes de estimar o limiar e seleciona o bloco
+    de maior impulso acumulado — preservando os dados reais da queima mesmo
+    com artefatos de saturação do sensor.
     """
-    if data.empty:
-        return data
+    from backend.tratamento import active_motor_window
 
-    thrust = data["Empuxo_N"]
-    pressure = data["Pressao_MPa"]
-
-    thrust_peak = float(thrust.max())
-    pressure_peak = float(pressure.max())
-
-    thrust_threshold = max(0.2, thrust_peak * 0.05)
-    pressure_threshold = max(0.02, pressure_peak * 0.05)
-
-    active_mask = ((thrust >= thrust_threshold) | (pressure >= pressure_threshold)).tolist()
-    if not any(active_mask):
-        return data
-
-    # Une pequenas lacunas para evitar que ruído quebre a queima em muitos blocos.
-    gap_fill = 3
-    i = 0
-    n_points = len(active_mask)
-    while i < n_points:
-        if active_mask[i]:
-            i += 1
-            continue
-        gap_start = i
-        while i < n_points and not active_mask[i]:
-            i += 1
-        gap_end = i - 1
-        gap_len = gap_end - gap_start + 1
-        if gap_start > 0 and i < n_points and gap_len <= gap_fill:
-            for j in range(gap_start, gap_end + 1):
-                active_mask[j] = True
-
-    peak_pos = int(thrust.idxmax() - data.index.min())
-
-    # Escolhe o bloco ativo que contém o pico de empuxo.
-    start_pos = peak_pos
-    while start_pos > 0 and active_mask[start_pos - 1]:
-        start_pos -= 1
-
-    end_pos = peak_pos
-    while end_pos < n_points - 1 and active_mask[end_pos + 1]:
-        end_pos += 1
-
-    start_idx = int(data.index.min() + start_pos)
-    end_idx = int(data.index.min() + end_pos)
-
-    # Inclui uma pequena margem para visualizar ignição e extinção.
-    start_idx = max(int(data.index.min()), start_idx - 2)
-    end_idx = min(int(data.index.max()), end_idx + 2)
-
-    window = data.loc[start_idx:end_idx].copy()
-    window["Tempo_rel"] = (window["Tempo_rel"] - float(window["Tempo_rel"].iloc[0])).round(4)
-    return window
+    return active_motor_window(data)
 
 
 def allowed_file(filename: str) -> bool:
@@ -156,6 +110,42 @@ def analise() -> str:
     return render_template("analises.html", displayopt="none")
 
 
+@page.route("/salvar")
+def salvar_relatorio() -> str:
+    """Renderiza a etapa dedicada de exportação do relatório.
+
+    A análise fica na sessão apenas enquanto o usuário escolhe o nome e os
+    títulos. O POST continua sendo tratado por :func:`save_motor`.
+    """
+    from backend import DEFAULT_TITULOS
+    from backend.biblioteca import get_motor
+
+    motor_data = session.get("motor_data")
+    result = None
+    name = ""
+    titles = dict(DEFAULT_TITULOS)
+
+    if motor_data:
+        name = Path(motor_data.get("name", "")).stem
+        result_path = motor_data.get("tmp_result_path")
+        if result_path and Path(result_path).exists():
+            result = _load_result_file(result_path)
+
+        existing = get_motor(name)
+        if existing and existing.graficos_titulos:
+            titles.update(existing.graficos_titulos)
+
+    return render_template(
+        "salvar_relatorio.html",
+        result=result,
+        name=name,
+        titulos_atuais=titles,
+        titulos_default=dict(DEFAULT_TITULOS),
+        titulo_campos=TITULOS_CAMPOS,
+        saved=request.args.get("saved") == "1",
+    )
+
+
 @page.route("/tratamento")
 def tratamento() -> str:
     """Renderiza a página de tratamento de dados (formulário de upload)."""
@@ -196,6 +186,20 @@ def internal_error(e: Exception) -> tuple:
 # ---------------------------------------------------------------------------
 # Rotas de Análise de Motor
 # ---------------------------------------------------------------------------
+
+
+def _load_result_file(path: str) -> dict:
+    """Carrega o dict de resultados salvo em disco pelo ``upload_motor``.
+
+    Args:
+        path: Caminho do arquivo JSON com o resultado serializado.
+
+    Returns:
+        dict: Resultado da análise (valores nativos Python).
+    """
+    import json as _json
+
+    return _json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 @page.route("/motor_upload", methods=["POST"])
@@ -239,12 +243,26 @@ def upload_motor() -> str:
         data = motor.get_data()
         data_window = _active_motor_window(data)
         result = motor.get_result()
-        # Armazena na sessão para que save_motor possa recriar o objeto
+        # Salva os dados em disco (a sessão cookie limita a ~4KB) e guarda
+        # apenas o caminho na sessão para que save_motor recrie o objeto.
+        tmp_file = TMP_DIR / f"motor_{os.urandom(6).hex()}.json"
+        data.to_json(tmp_file, orient="records")
+        # O result também vai para disco: além de evitar o limite do cookie,
+        # garante que valores numpy (np.int64 etc.) não quebrem a
+        # serialização JSON da sessão do Flask.
+        import json as _json
+
+        tmp_result = TMP_DIR / f"result_{os.urandom(6).hex()}.json"
+        tmp_result.write_text(
+            _json.dumps(result, ensure_ascii=False), encoding="utf-8"
+        )
         session["motor_data"] = {
             "name": uploaded_file.filename.replace(".csv", "").replace(".txt", ""),
-            "result": result,
-            "df_json": data.to_json(orient="records"),
+            "tmp_path": str(tmp_file),
+            "tmp_result_path": str(tmp_result),
         }
+        from backend import DEFAULT_TITULOS
+
         return render_template(
             "graficos_motor.html",
             x=data_window["Tempo_rel"].to_list(),
@@ -252,6 +270,8 @@ def upload_motor() -> str:
             y_pressure=data_window["Pressao_MPa"].to_list(),
             result=result,
             outliers_removed=outliers_removed,
+            titulo_campos=TITULOS_CAMPOS,
+            titulos_atuais=DEFAULT_TITULOS,
         )
     except Exception as exc:  # pylint: disable=broad-except
         return render_template(
@@ -285,16 +305,58 @@ def save_motor() -> str:
 
     try:
         import pandas as pd  # import lazy para reduzir tempo de cold start
+        from backend.biblioteca import (
+            MotorMetadata,
+            get_motor,
+            save_motor_metadata,
+        )
 
         motor = motor_analisys.__new__(motor_analisys)
-        motor.df = pd.read_json(session["motor_data"]["df_json"], orient="records")
-        motor.df_result = session["motor_data"]["result"]
-        motor.save_analisys(name)
-        session.pop("motor_data", None)
-        return render_template(
-            "analises.html", msg="Análise salva com sucesso!", displayopt="block"
+        motor.df = pd.read_json(session["motor_data"]["tmp_path"], orient="records")
+        motor.df_result = _load_result_file(
+            session["motor_data"]["tmp_result_path"]
         )
+
+        # Títulos editados no formulário (antes de salvar), mesclados com os
+        # valores padrão e com os já salvos no motor (preferência ao form).
+        titulos = {
+            key: request.form.get(key, "").strip()
+            for key, _ in TITULOS_CAMPOS
+        }
+        titulos = {k: v for k, v in titulos.items() if v}
+
+        # Registra/atualiza o motor na biblioteca ANTES de salvar, para que o
+        # save_analisys grave na pasta da biblioteca (formato "relatorios":
+        # PDF na raiz, graficos/ e dados/ em subpastas).
+        existing = get_motor(name)
+        if existing is not None:
+            if not titulos and existing.graficos_titulos:
+                titulos = existing.graficos_titulos
+            existing.graficos_titulos = titulos or None
+            save_motor_metadata(name, existing)
+        else:
+            meta = MotorMetadata(
+                nome=name,
+                graficos_titulos=titulos or None,
+            )
+            save_motor_metadata(name, meta)
+
+        motor.save_analisys(name, titulos=titulos)
+
+        for tmp_key in ("tmp_path", "tmp_result_path"):
+            tmp_path = Path(session["motor_data"][tmp_key])
+            if tmp_path.exists():
+                tmp_path.unlink()
+        session.pop("motor_data", None)
+        return redirect(url_for("page.salvar_relatorio", saved="1"))
     except Exception as exc:  # pylint: disable=broad-except
+        # Limpa os temporários mesmo em caso de erro (evita lixo em data/tmp/)
+        motor_data = session.get("motor_data")
+        if motor_data:
+            for tmp_key in ("tmp_path", "tmp_result_path"):
+                tmp_path = Path(motor_data[tmp_key])
+                if tmp_path.exists():
+                    tmp_path.unlink()
         return render_template(
             "analises.html", msg=f"Erro ao salvar: {str(exc)}", displayopt="block"
         )
@@ -353,13 +415,16 @@ def upload_data() -> str:
         pressure_slider_max = float(data_raw["Pressao_MPa"].max())
 
         table_info = data.get_stats()
-        threshold = round(data_raw["Empuxo_N"].mean(), 3)
+        threshold = default_filter_threshold(data_raw)
         data_filtered = data.data_filter(threshold, [time_slider_min, time_slider_max])
 
-        # Armazena na sessão para update_filters e save_treatment
+        # A sessão Flask é limitada a um cookie (~4KB): o DataFrame é serializado
+        # em disco (data/tmp/) e apenas o caminho vai para a sessão.
+        tmp_file = TMP_DIR / f"treatment_{os.urandom(6).hex()}.json"
+        tmp_file.write_text(data_raw.to_json(orient="records"), encoding="utf-8")
         session["treatment_data"] = {
             "filename": uploaded_file.filename,
-            "df_json": data_raw.to_json(orient="records"),
+            "tmp_path": str(tmp_file),
         }
 
         return render_template(
@@ -406,8 +471,13 @@ def save_treatment() -> str:
         import pandas as pd  # import lazy
 
         data = data_treatment.__new__(data_treatment)
-        data.data = pd.read_json(session["treatment_data"]["df_json"], orient="records")
+        data.data = pd.read_json(
+            session["treatment_data"]["tmp_path"], orient="records"
+        )
         saved_path = data.save_treatment(name)
+        tmp_path = Path(session["treatment_data"]["tmp_path"])
+        if tmp_path.exists():
+            tmp_path.unlink()
         session.pop("treatment_data", None)
         return render_template(
             "tratamento.html",
@@ -448,7 +518,9 @@ def update_filters() -> tuple:
         import pandas as pd  # import lazy
 
         data = data_treatment.__new__(data_treatment)
-        data.data = pd.read_json(session["treatment_data"]["df_json"], orient="records")
+        data.data = pd.read_json(
+            session["treatment_data"]["tmp_path"], orient="records"
+        )
 
         data_filtered = data.data_filter(threshold, [tmin, tmax])
         table_info = data.get_stats()
@@ -479,7 +551,13 @@ def create_app() -> Flask:
 
     Returns:
         Flask: Instância da aplicação pronta para uso.
+
+    Raises:
+        RuntimeError: Se dependências do projeto (ex. ``reportlab``) não
+            estiverem instaladas — mensagem com o comando de instalação.
     """
+    ensure_dependencies()
+
     app = Flask(__name__)
     app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
     app.config["MAX_CONTENT_LENGTH"] = _MAX_CONTENT_LENGTH

@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from backend import motor_analisys  # noqa: E402  # pylint: disable=wrong-import-position
+from backend.deps import ensure_dependencies  # pylint: disable=wrong-import-position
 
 
 # ANSI colors (disabled automatically when output is not a TTY)
@@ -86,7 +87,7 @@ def _sparkline(values, width=50):
     return "".join(out)
 
 
-def analyze(csv_path, as_json=False, save=None, no_color=False, units="kg", remove_outliers=False):
+def analyze(csv_path, as_json=False, save=None, no_color=False, units="kg", remove_outliers=False, out_dir=None):
     """Processa um CSV de teste estático e imprime/salva os insights.
 
     É a função central do CLI: carrega o arquivo via
@@ -98,11 +99,12 @@ def analyze(csv_path, as_json=False, save=None, no_color=False, units="kg", remo
         csv_path: Caminho do arquivo CSV de teste estático.
         as_json: Se ``True``, imprime o resultado como JSON em vez do
             relatório formatado.
-        save: Se informado, nome base para salvar a análise completa em
-            ``data/motor_result/``.
+        save: Se informado, nome base para salvar a análise completa.
         no_color: Se ``True``, desativa as cores ANSI na saída.
         units: Unidade de medida do empuxo (``'kg'`` ou ``'g'``).
         remove_outliers: Se ``True``, remove outliers antes da análise.
+        out_dir: Diretório de destino para ``save`` (padrão:
+            ``data/motor_result`` ou biblioteca, se já registrado).
 
     Returns:
         int: Código de saída (0 em sucesso; 1 em erro de arquivo/parsing).
@@ -142,11 +144,20 @@ def analyze(csv_path, as_json=False, save=None, no_color=False, units="kg", remo
         _print_report(csv_path, result, df, outliers_removed)
 
     if save:
-        motor.save_analisys(save)
+        try:
+            ensure_dependencies(["matplotlib", "reportlab"])
+        except RuntimeError as e:
+            print(
+                f"{C.RED}Não foi possível salvar a análise completa.{C.RESET}",
+                file=sys.stderr,
+            )
+            print(f"{C.DIM}{e}{C.RESET}", file=sys.stderr)
+            return 1
+        motor.save_analisys(save, output_dir=out_dir)
         if not as_json:
             print(
                 f"\n{C.GREEN}✓ Análise completa salva (CSV + gráfico + PDF) "
-                f"em data/motor_result/{C.RESET}"
+                f"em {out_dir or 'data/motor_result'}/{C.RESET}"
             )
 
     return 0
@@ -217,6 +228,13 @@ def main(argv=None):
     Returns:
         int: Código de saída.
     """
+    # Garante UTF-8 no stdout/stderr (Windows usa cp1252 por padrão, que
+    # quebra os caracteres Unicode do banner e de acentos em mensagens).
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     if argv is None:
         argv = sys.argv[1:]
 
@@ -250,6 +268,11 @@ def _main_analyze(argv) -> int:
         help="Salva análise completa (CSV + gráfico + PDF) com o nome dado",
     )
     parser.add_argument(
+        "--out",
+        metavar="DIR",
+        help="Diretório de destino para --save (padrão: data/motor_result)",
+    )
+    parser.add_argument(
         "--no-color", action="store_true", help="Desativa cores ANSI na saída"
     )
     parser.add_argument(
@@ -272,6 +295,7 @@ def _main_analyze(argv) -> int:
         no_color=args.no_color,
         units=args.units,
         remove_outliers=args.remove_outliers,
+        out_dir=args.out,
     )
 
 

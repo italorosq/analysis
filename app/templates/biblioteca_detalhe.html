@@ -55,6 +55,19 @@
     {% endif %}
 
     <section class="card">
+      <h3>Opções do relatório (títulos)</h3>
+      <p class="form-hint">
+        Salva os títulos e regenera o relatório (PDF + gráficos) na estrutura
+        <code>graficos/</code> e <code>dados/</code>. Campos vazios usam o padrão.
+      </p>
+      <form method="POST" action="/biblioteca/{{ motor.nome }}/opcoes"
+            class="titulos-form">
+        {% include "_titulos_editor.html" %}
+        <button type="submit" class="btn btn-primary">Salvar e regenerar relatório</button>
+      </form>
+    </section>
+
+    <section class="card">
       <h3>Notas</h3>
       <textarea id="notes" class="notes-input"
                 data-motor="{{ motor.nome }}">{{ motor.notas }}</textarea>

@@ -48,6 +48,8 @@ class MotorMetadata:
         openmotor_dados: Parsed data from the .eng file (dict).
         fotos: List of photo filenames.
         notas: Free-form notes field.
+        graficos_titulos: Custom chart/PDF titles (keys from the
+            ``DEFAULT_TITULOS`` dict in :mod:`backend.analises`).
     """
 
     nome: str
@@ -69,6 +71,7 @@ class MotorMetadata:
     openmotor_dados: dict | None = None
     fotos: list[str] = field(default_factory=list)
     notas: str = ""
+    graficos_titulos: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +199,74 @@ def delete_motor(nome: str) -> bool:
     return True
 
 
+def update_quality_metadata(
+    nome: str,
+    result: dict | None,
+    *,
+    csv_original: str | None = None,
+    resultados_csv: str | None = None,
+    grafico_png: str | None = None,
+    relatorio_pdf: str | None = None,
+    data_teste: str | None = None,
+) -> MotorMetadata:
+    """Atualiza o ``motor.json`` com as métricas da análise e as referências
+    dos arquivos gerados.
+
+    Cria o registro se ainda não existir e **preserva** os campos já salvos
+    (``notas``, ``fotos``, ``openmotor_*``, ``graficos_titulos``).
+
+    Os valores são lidos do dicionário produzido por
+    :meth:`backend.analises.motor_analisys.get_result` (chaves em pt-BR,
+    ex.: ``"Impulso [N*s]"``), com fallback para os valores atuais quando a
+    chave não estiver presente.
+
+    Args:
+        nome: Motor name (directory name).
+        result: Dicionário de resultados da análise (pode ser ``None``).
+        csv_original: Nome do CSV de dados completos (ex.: ``dados/x.csv``).
+        resultados_csv: Nome do CSV de resultados.
+        grafico_png: Nome do PNG principal (combinado).
+        relatorio_pdf: Nome do PDF do relatório.
+        data_teste: Data do teste em ISO 8601 (se ``None``, não altera).
+
+    Returns:
+        MotorMetadata: Metadados persistidos.
+    """
+    meta = get_motor(nome)
+    if meta is None:
+        meta = MotorMetadata(nome=nome)
+
+    if result:
+        meta.impulso_total_Ns = float(result.get("Impulso [N*s]", meta.impulso_total_Ns) or 0)
+        meta.empuxo_maximo_N = float(result.get("Empuxo max [N]", meta.empuxo_maximo_N) or 0)
+        meta.empuxo_medio_N = float(result.get("Empuxo medio [N]", meta.empuxo_medio_N) or 0)
+        if result.get("Empuxo min [N]") is not None:
+            meta.empuxo_minimo_N = float(result["Empuxo min [N]"])
+        meta.pressao_maxima_MPa = float(
+            result.get("Pressao max [MPa]", meta.pressao_maxima_MPa) or 0
+        )
+        meta.pressao_media_MPa = float(
+            result.get("Pressao media [MPa]", meta.pressao_media_MPa) or 0
+        )
+        meta.duracao_s = float(result.get("Duracao [s]", meta.duracao_s) or 0)
+        meta.classe = str(result.get("Classe", meta.classe) or "")
+        meta.pontos_amostrais = int(result.get("Pontos amostrais", meta.pontos_amostrais) or 0)
+
+    if csv_original is not None:
+        meta.csv_original = csv_original
+    if resultados_csv is not None:
+        meta.resultados_csv = resultados_csv
+    if grafico_png is not None:
+        meta.grafico_png = grafico_png
+    if relatorio_pdf is not None:
+        meta.relatorio_pdf = relatorio_pdf
+    if data_teste is not None:
+        meta.data_teste = data_teste
+
+    save_motor_metadata(nome, meta)
+    return meta
+
+
 # ---------------------------------------------------------------------------
 # File management
 # ---------------------------------------------------------------------------
@@ -227,23 +298,39 @@ def list_files(nome: str) -> dict[str, list[str]]:
     for f in sorted(motor_dir.iterdir()):
         if f.name == "motor.json":
             continue
-        if not f.is_file():
+        if f.is_dir():
+            # Pastas no formato "relatorios" (graficos/ e dados/),
+            # prefixando a categoria com a subpasta.
+            for sub in sorted(f.iterdir()):
+                if not sub.is_file():
+                    continue
+                _classify(file=f"{f.name}/{sub.name}", result=result)
             continue
-        ext = f.suffix.lower()
-        if ext == ".csv":
-            result["csv"].append(f.name)
-        elif ext == ".png":
-            result["png"].append(f.name)
-        elif ext == ".pdf":
-            result["pdf"].append(f.name)
-        elif ext == ".eng":
-            result["eng"].append(f.name)
-        elif ext in (".jpg", ".jpeg"):
-            result["fotos"].append(f.name)
-        else:
-            result["outros"].append(f.name)
+        _classify(file=f.name, result=result)
 
     return result
+
+
+def _classify(file: str, result: dict[str, list[str]]) -> None:
+    """Adiciona um arquivo à categoria correta de :func:`list_files`.
+
+    Args:
+        file: Nome do arquivo (pode incluir subpasta, ex.: ``graficos/x.png``).
+        result: Dicionário de categorias a preencher.
+    """
+    ext = Path(file).suffix.lower()
+    if ext == ".csv":
+        result["csv"].append(file)
+    elif ext == ".png":
+        result["png"].append(file)
+    elif ext == ".pdf":
+        result["pdf"].append(file)
+    elif ext == ".eng":
+        result["eng"].append(file)
+    elif ext in (".jpg", ".jpeg"):
+        result["fotos"].append(file)
+    else:
+        result["outros"].append(file)
 
 
 def register_file(nome: str, filename: str, category: str) -> None:
@@ -309,6 +396,38 @@ def unregister_file(nome: str, filename: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Encoding helpers (arquivos legados podem estar em cp1252 no Windows)
+# ---------------------------------------------------------------------------
+
+def _read_text_any_encoding(path: Path) -> str:
+    """Lê um arquivo de texto tolerando a codificação real do disco.
+
+    Arquivos legados gerados no Windows podem estar em cp1252 (a codificação
+    padrão de ``Path.write_text`` na época). Tenta UTF-8 (com BOM, se houver)
+    primeiro e cai para cp1252/latin-1 — que nunca falha — garantindo a leitura
+    de qualquer arquivo legado.
+    """
+    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return path.read_text(encoding=enc)
+        except UnicodeDecodeError:
+            continue
+    return path.read_text(encoding="latin-1")
+
+
+def _read_csv_any_encoding(path: Path):
+    """Lê um CSV legado (separador ``;``) tolerando a codificação do disco. """
+    import pandas as pd
+
+    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return pd.read_csv(path, sep=";", encoding=enc)
+        except UnicodeDecodeError:
+            continue
+    return pd.read_csv(path, sep=";", encoding="latin-1")
+
+
+# ---------------------------------------------------------------------------
 # Legacy migration
 # ---------------------------------------------------------------------------
 
@@ -327,8 +446,7 @@ def infer_date_from_legacy(dados_csv_path: Path) -> str | None:
         return None
 
     try:
-        with open(dados_csv_path, encoding="utf-8") as f:
-            lines = f.readlines()
+        lines = _read_text_any_encoding(dados_csv_path).splitlines()
 
         # Skip header line, find first data line with a date
         for line in lines[1:]:
@@ -407,9 +525,7 @@ def migrate_legacy_motor_result(dry_run: bool = False) -> list[str]:
 
             # Parse results CSV
             try:
-                import pandas as pd
-
-                df = pd.read_csv(files["resultados"], sep=";")
+                df = _read_csv_any_encoding(files["resultados"])
                 if len(df) > 0:
                     row = df.iloc[0]
                     metadata.impulso_total_Ns = float(row.get("Impulso [N*s]", 0))

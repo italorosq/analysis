@@ -10,17 +10,68 @@
     <script>
       // Thrust chart
       const thrustLabels = {{x|safe}};
+      const thrustY = {{y|safe}};
+
+      // Encontra pico de empuxo para anotação visual
+      const peakIdx = thrustY.indexOf(Math.max(...thrustY));
+      const peakT = thrustLabels[peakIdx];
+      const peakF = thrustY[peakIdx];
+      // Zoom: encontra primeiro e último ponto acima de 2% do pico
+      const thrZoom = peakF * 0.02;
+      let zoomStart = 0, zoomEnd = thrustLabels.length - 1;
+      for (let i = 0; i < thrustY.length; i++) {
+        if (thrustY[i] >= thrZoom) { zoomStart = i; break; }
+      }
+      for (let i = thrustY.length - 1; i >= 0; i--) {
+        if (thrustY[i] >= thrZoom) { zoomEnd = i; break; }
+      }
+      const xMin = thrustLabels[Math.max(0, zoomStart - 2)];
+      const xMax = thrustLabels[Math.min(thrustLabels.length - 1, zoomEnd + 2)];
+
       const thrustData = {
         labels: thrustLabels,
-        datasets: [{
-          label: 'Empuxo do Motor (N)',
-          backgroundColor: 'rgba(0, 33, 150, 0.1)',
-          borderColor: '#002196',
-          borderWidth: 2,
-          data: {{y|safe}},
-          fill: true,
-          tension: 0.3
-        }]
+        datasets: [
+          {
+            label: 'Bruto (N)',
+            backgroundColor: 'rgba(160, 168, 192, 0.15)',
+            borderColor: '#a0a8c0',
+            borderWidth: 1,
+            data: thrustY,
+            fill: false,
+            tension: 0.1,
+            pointRadius: 0,
+            order: 2
+          },
+          {
+            label: 'Suavizado (N)',
+            backgroundColor: 'rgba(0, 33, 150, 0.12)',
+            borderColor: '#002196',
+            borderWidth: 2.5,
+            data: thrustY.map((v, i) => {
+              // média móvel simples (janela 7)
+              const w = 7, half = Math.floor(w / 2);
+              let sum = 0, cnt = 0;
+              for (let j = i - half; j <= i + half; j++) {
+                if (j >= 0 && j < thrustY.length) { sum += thrustY[j]; cnt++; }
+              }
+              return sum / cnt;
+            }),
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0,
+            order: 1
+          },
+          {
+            label: 'Pico',
+            data: thrustY.map((v, i) => i === peakIdx ? v : null),
+            borderColor: '#e63946',
+            backgroundColor: '#e63946',
+            pointRadius: 6,
+            pointHoverRadius: 8,
+            showLine: false,
+            order: 0
+          }
+        ]
       };
 
       const thrustConfig = {
@@ -31,17 +82,26 @@
           responsive: true,
           interaction: { mode: 'index', intersect: false },
           plugins: {
-            legend: { display: true, position: 'top' },
-            tooltip: { mode: 'index', intersect: false }
+            legend: { display: true, position: 'top', labels: { font: { weight: 'bold' } } },
+            tooltip: {
+              mode: 'index', intersect: false,
+              callbacks: {
+                title: (items) => 't = ' + parseFloat(items[0].label).toFixed(3) + ' s',
+                label: (item) => item.dataset.label + ': ' + item.parsed.y.toFixed(2) + ' N'
+              }
+            }
           },
           scales: {
             x: {
-              ticks: { color: '#000423' },
-              title: { display: true, align: 'center', text: 'Tempo de Operação [s]', color: '#000423' }
+              ticks: { color: '#000423', maxTicksLimit: 12 },
+              title: { display: true, align: 'center', text: 'Tempo de Operação [s]', color: '#000423', font: { weight: 'bold' } },
+              min: xMin,
+              max: xMax
             },
             y: {
               ticks: { color: '#000423' },
-              title: { display: true, align: 'center', text: 'Empuxo [N]', color: '#000423' }
+              title: { display: true, align: 'center', text: 'Empuxo [N]', color: '#000423', font: { weight: 'bold' } },
+              beginAtZero: true
             }
           }
         }
@@ -51,16 +111,18 @@
 
       // Pressure chart
       const pressureLabels = {{x|safe}};
+      const pressureY = {{y_pressure|safe}};
       const pressureData = {
         labels: pressureLabels,
         datasets: [{
           label: 'Pressão da Câmara (MPa)',
           backgroundColor: 'rgba(0, 100, 200, 0.1)',
           borderColor: '#0064C8',
-          borderWidth: 2,
-          data: {{y_pressure|safe}},
+          borderWidth: 2.5,
+          data: pressureY,
           fill: true,
-          tension: 0.3
+          tension: 0.3,
+          pointRadius: 0
         }]
       };
 
@@ -72,17 +134,19 @@
           responsive: true,
           interaction: { mode: 'index', intersect: false },
           plugins: {
-            legend: { display: true, position: 'top' },
+            legend: { display: true, position: 'top', labels: { font: { weight: 'bold' } } },
             tooltip: { mode: 'index', intersect: false }
           },
           scales: {
             x: {
-              ticks: { color: '#000423' },
-              title: { display: true, align: 'center', text: 'Tempo de Operação [s]', color: '#000423' }
+              ticks: { color: '#000423', maxTicksLimit: 12 },
+              title: { display: true, align: 'center', text: 'Tempo de Operação [s]', color: '#000423', font: { weight: 'bold' } },
+              min: xMin,
+              max: xMax
             },
             y: {
               ticks: { color: '#000423' },
-              title: { display: true, align: 'center', text: 'Pressão [MPa]', color: '#000423' }
+              title: { display: true, align: 'center', text: 'Pressão [MPa]', color: '#000423', font: { weight: 'bold' } }
             }
           }
         }
@@ -94,7 +158,7 @@
       <div class="card" id="table" style="height: 70%">
         {% if outliers_removed is defined and outliers_removed > 0 %}
         <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; font-size: 0.9em;">
-          ⚠️ <strong>{{ outliers_removed }}</strong> outlier(s) removido(s) via filtro IQR.
+          ⚠️ <strong>{{ outliers_removed }}</strong> outlier(s) removido(s) via filtro Hampel.
         </div>
         {% endif %}
         <table>
@@ -114,13 +178,10 @@
           </tbody>
         </table>
       </div>
-      <div class="card save" style="height: 30%">
+      <div class="card save">
         <h2>Salvar análise</h2>
-        <form action="{{ url_for('page.save_motor') }}" method="POST">
-          <label for="name">Nome do motor:</label>
-          <input type="text" name="name" id="name" placeholder="Ex: SR1500_Nozzle_Aco" required />
-          <input type="submit" value="Salvar" />
-        </form>
+        <p class="field-hint">A exportação agora fica na aba dedicada para você revisar tudo antes de gerar os arquivos.</p>
+        <a class="btn btn-primary" href="{{ url_for('page.salvar_relatorio') }}">Abrir aba Salvar dados</a>
       </div>
     </div>
   </div>
