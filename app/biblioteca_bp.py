@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import os
 
-from backend.analises import TITULOS_CAMPOS, merge_titulos
+from backend.analises import DEFAULT_TITULOS, TITULOS_CAMPOS, merge_titulos
 from backend.biblioteca import (
     MotorMetadata,
+    _get_library_dir,
     delete_motor,
     get_motor,
     list_files,
@@ -25,7 +26,6 @@ from backend.config import (
     ALLOWED_PHOTO_EXTENSIONS,
     ALLOWED_UPLOAD_EXTENSIONS,
     LEGACY_MOTOR_RESULT_DIR,
-    LIBRARY_DIR,
 )
 from backend.parser_eng import parse_eng_from_text
 from flask import (
@@ -138,6 +138,7 @@ def detalhe(nome: str) -> str:
         files=files,
         titulo_campos=TITULOS_CAMPOS,
         titulos_atuais=merge_titulos(motor.graficos_titulos),
+        titulos_default=dict(DEFAULT_TITULOS),
     )
 
 
@@ -180,7 +181,7 @@ def upload(nome: str) -> str:
     filename = _safe_filename(uploaded.filename)
     ext = "." + filename.rsplit(".", 1)[1].lower()
 
-    motor_dir = LIBRARY_DIR / nome
+    motor_dir = _get_library_dir() / nome
 
     if ext in ALLOWED_ENG_EXTENSIONS:
         # Parse .eng file
@@ -249,7 +250,7 @@ def file_download(nome: str, filename: str):
     if get_motor(nome) is None:
         abort(404)
 
-    motor_dir = LIBRARY_DIR / nome
+    motor_dir = _get_library_dir() / nome
     file_path = (motor_dir / filename).resolve()
     motor_root = motor_dir.resolve()
     if not str(file_path).startswith(str(motor_root)) or not file_path.is_file():
@@ -294,7 +295,7 @@ def delete_file(nome: str, filename: str) -> str:
     if get_motor(nome) is None:
         abort(404)
 
-    motor_dir = LIBRARY_DIR / nome
+    motor_dir = _get_library_dir() / nome
     file_path = (motor_dir / filename).resolve()
     motor_root = motor_dir.resolve()
     if not str(file_path).startswith(str(motor_root)):
@@ -365,7 +366,7 @@ def update_opcoes(nome: str) -> str:
     try:
         from backend.analises import motor_analisys
 
-        fonte = LIBRARY_DIR / nome / "dados" / f"{nome}_dados.csv"
+        fonte = _get_library_dir() / nome / "dados" / f"{nome}_dados.csv"
         if not fonte.exists():
             flash(
                 "Opções salvas, mas não há dados salvos para regenerar o relatório. "
