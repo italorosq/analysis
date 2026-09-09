@@ -54,71 +54,12 @@
             </div>
             <span class="section-number">02</span>
           </div>
-          <p class="section-copy">Os valores começam em inglês, mas cada campo pode ser alterado livremente antes de salvar.</p>
-
-          <div class="title-groups">
-            <div class="title-group">
-              <h4>Report structure</h4>
-              {% for key, label in titulo_campos if key in ['pdf_titulo', 'secao_combinado', 'secao_forca', 'secao_impulso', 'secao_spline'] %}
-              <label class="title-field">
-                <span>{{ label }}</span>
-                <input type="text" name="{{ key }}" value="{{ titulos_atuais.get(key, '') }}"
-                       data-preview="{{ key }}" />
-              </label>
-              {% endfor %}
-            </div>
-            <div class="title-group">
-              <h4>Chart titles</h4>
-              {% for key, label in titulo_campos if key in ['grafico_forca', 'grafico_impulso', 'grafico_spline', 'grafico_empuxo', 'grafico_pressao'] %}
-              <label class="title-field">
-                <span>{{ label }}</span>
-                <input type="text" name="{{ key }}" value="{{ titulos_atuais.get(key, '') }}"
-                       data-preview="{{ key }}" />
-              </label>
-              {% endfor %}
-            </div>
-            <div class="title-group">
-              <h4>Axis labels</h4>
-              {% for key, label in titulo_campos if key in ['rotulo_tempo', 'rotulo_empuxo', 'rotulo_pressao', 'rotulo_impulso'] %}
-              <label class="title-field">
-                <span>{{ label }}</span>
-                <input type="text" name="{{ key }}" value="{{ titulos_atuais.get(key, '') }}"
-                       data-preview="{{ key }}" />
-              </label>
-              {% endfor %}
-            </div>
-            <div class="title-group legend-group">
-              <h4>Curve legends</h4>
-              {% for key, label in titulo_campos if key.startswith('legenda_') %}
-              <label class="title-field">
-                <span>{{ label }}</span>
-                <input type="text" name="{{ key }}" value="{{ titulos_atuais.get(key, '') }}" />
-              </label>
-              {% endfor %}
-            </div>
-          </div>
+          <p class="section-copy">Cada campo mostra em cinza o valor padrão, que pode ser alterado livremente. A prévia acima reage em tempo real.</p>
+          {% include "_titulos_editor.html" %}
         </section>
       </main>
 
       <aside class="save-sidebar">
-        <section class="card live-preview">
-          <div class="section-heading compact">
-            <div>
-              <span class="eyebrow">LIVE PREVIEW</span>
-              <h3 id="preview-pdf">{{ titulos_atuais.get('pdf_titulo') }}</h3>
-            </div>
-            <span class="preview-live">LIVE</span>
-          </div>
-          <div class="preview-sheet">
-            <div class="preview-sheet-bar"></div>
-            <strong id="preview-combined">{{ titulos_atuais.get('secao_combinado') }}</strong>
-            <span id="preview-force">{{ titulos_atuais.get('secao_forca') }}</span>
-            <span id="preview-impulse">{{ titulos_atuais.get('secao_impulso') }}</span>
-            <span id="preview-spline">{{ titulos_atuais.get('secao_spline') }}</span>
-          </div>
-          <p class="field-hint">A prévia mostra os títulos que aparecerão nas seções do PDF.</p>
-        </section>
-
         <section class="card package-card">
           <div class="section-heading compact">
             <div>
@@ -143,20 +84,6 @@
 
 {% block scripts %}
 <script>
-  const previewMap = {
-    pdf_titulo: 'preview-pdf',
-    secao_combinado: 'preview-combined',
-    secao_forca: 'preview-force',
-    secao_impulso: 'preview-impulse',
-    secao_spline: 'preview-spline'
-  };
-  document.querySelectorAll('[data-preview]').forEach((input) => {
-    input.addEventListener('input', () => {
-      const target = document.getElementById(previewMap[input.dataset.preview]);
-      if (target) target.textContent = input.value || 'Untitled';
-    });
-  });
-
   const form = document.getElementById('save-report-form');
   if (form) {
     form.addEventListener('submit', () => {

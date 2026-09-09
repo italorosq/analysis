@@ -72,4 +72,68 @@ document.addEventListener("DOMContentLoaded", function () {
       setTimeout(() => flash.remove(), 500);
     }, 5000);
   });
+
+  initTitleEditor();
 });
+
+// ---------------------------------------------------------------------------
+// Editor de títulos de gráficos/relatório (aba Salvar + Biblioteca)
+// - preview ao vivo de cada campo
+// - contagem de campos personalizados (valor != padrão)
+// - reset por grupo / reset total
+// ---------------------------------------------------------------------------
+function initTitleEditor() {
+  const editor = document.getElementById("te-editor");
+  if (!editor) return;
+
+  const countEl = document.getElementById("te-count");
+
+  const isDirty = (input) => (input.value || "").trim() !== (input.placeholder || "").trim();
+
+  function refresh() {
+    let total = 0;
+    editor.querySelectorAll("[data-te-key]").forEach((input) => {
+      const dirty = isDirty(input);
+      input.classList.toggle("dirty", dirty);
+      if (dirty) total++;
+
+      const pv = document.getElementById("te-pv-" + input.dataset.teKey);
+      if (pv) pv.textContent = (input.value || "").trim() || input.placeholder || "\u2014";
+    });
+    if (countEl) countEl.textContent = String(total);
+
+    editor.querySelectorAll(".te-group").forEach((group) => {
+      const badge = group.querySelector("[data-badge]");
+      if (!badge) return;
+      const count = group.querySelectorAll("[data-te-key].dirty").length;
+      badge.textContent = String(count);
+      badge.setAttribute("data-count", String(count));
+    });
+  }
+
+  function resetGroup(gid) {
+    editor.querySelectorAll(".g" + gid + " [data-te-key]").forEach((input) => {
+      input.value = "";
+    });
+    refresh();
+  }
+
+  editor.addEventListener("input", (event) => {
+    if (event.target.matches("[data-te-key]")) refresh();
+  });
+  editor.addEventListener("click", (event) => {
+    const resetBtn = event.target.closest("[data-reset-group]");
+    if (resetBtn) {
+      resetGroup(resetBtn.getAttribute("data-reset-group"));
+      return;
+    }
+    if (event.target.closest("#te-reset-all")) {
+      editor.querySelectorAll("[data-te-key]").forEach((input) => {
+        input.value = "";
+      });
+      refresh();
+    }
+  });
+
+  refresh();
+}

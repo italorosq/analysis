@@ -56,20 +56,13 @@
 
     <section class="card">
       <h3>Opções do relatório (títulos)</h3>
+      <p class="form-hint">
+        Salva os títulos e regenera o relatório (PDF + gráficos) na estrutura
+        <code>graficos/</code> e <code>dados/</code>. Campos vazios usam o padrão.
+      </p>
       <form method="POST" action="/biblioteca/{{ motor.nome }}/opcoes"
             class="titulos-form">
-        {% for key, label in titulo_campos %}
-        <label class="titulo-field">
-          <span>{{ label }}</span>
-          <input type="text" name="{{ key }}"
-                 value="{{ titulos_atuais.get(key, '') }}"
-                 placeholder="{{ titulos_atuais.get(key, '') }}" />
-        </label>
-        {% endfor %}
-        <p class="form-hint">
-          Salva os títulos e regenera o relatório (PDF + gráficos) na estrutura
-          <code>graficos/</code> e <code>dados/</code>.
-        </p>
+        {% include "_titulos_editor.html" %}
         <button type="submit" class="btn btn-primary">Salvar e regenerar relatório</button>
       </form>
     </section>
