@@ -26,7 +26,7 @@ Onde:
 """
 
 from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 
 # Títulos padrão dos gráficos e do relatório. Podem ser sobrescritos por motor
 # (armazenados em ``motor.json`` -> ``graficos_titulos``) ou via parâmetro
@@ -87,7 +87,7 @@ TITULOS_CAMPOS = [
 ]
 
 
-def merge_titulos(titulos: Optional[dict]) -> dict:
+def merge_titulos(titulos: dict | None) -> dict:
     """Mescla títulos customizados sobre os padrão, ignorando vazios.
 
     Args:
@@ -105,6 +105,33 @@ import numpy as np
 import pandas as pd
 from scipy import integrate
 from scipy.interpolate import CubicSpline
+
+
+def _safe_replace(candidate: Path, target: Path, attempts: int = 3) -> None:
+    """Move ``candidate`` para ``target`` de forma atômica, com novas tentativas.
+
+    Em ambientes com sincronização de arquivos (ex.: OneDrive) ou com o PDF
+    aberto em um visualizador, o ``os.replace`` pode falhar de forma
+    *transitória* com ``PermissionError``. Tentamos novamente com um pequeno
+    atraso antes de propagar o erro.
+
+    Args:
+        candidate: Arquivo temporário gerado.
+        target: Destino final.
+        attempts: Número de tentativas. Padrão: 3.
+    """
+    import os
+    import time
+
+    for attempt in range(attempts):
+        try:
+            os.replace(candidate, target)
+            return
+        except PermissionError:
+            if attempt < attempts - 1:
+                time.sleep(0.4 * (attempt + 1))
+                continue
+            raise
 
 # Tabela de classificação NAR/TRA: (impulso máximo em N·s, designação)
 _MOTOR_CLASSES = [
@@ -200,7 +227,7 @@ class motor_analisys:  # pylint: disable=invalid-name
         self.df["Tempo_rel"] = self.df["Tempo_rel"].round(4)
         self.df["Pressao_MPa"] = self.df["Pressao_MPa"].round(4)
 
-        self.df_result: Optional[dict] = None
+        self.df_result: dict | None = None
 
     def get_data(self) -> pd.DataFrame:
         """Retorna o DataFrame completo já convertido.
@@ -433,8 +460,8 @@ class motor_analisys:  # pylint: disable=invalid-name
         ax.tick_params(labelsize=10)
 
     def plot_analisys(
-        self, name: str, output_dir: Optional[Union[str, Path]] = None,
-        titulos: Optional[dict] = None,
+        self, name: str, output_dir: str | Path | None = None,
+        titulos: dict | None = None,
     ) -> Path:
         """Gera o gráfico PNG com as curvas de empuxo e pressão.
 
@@ -538,8 +565,8 @@ class motor_analisys:  # pylint: disable=invalid-name
         return graph_path
 
     def plot_force_time(
-        self, name: str, output_dir: Optional[Union[str, Path]] = None,
-        titulos: Optional[dict] = None,
+        self, name: str, output_dir: str | Path | None = None,
+        titulos: dict | None = None,
     ) -> Path:
         """Gera o gráfico avulso Força × Tempo (empuxo em Newtons).
 
@@ -619,8 +646,8 @@ class motor_analisys:  # pylint: disable=invalid-name
         return path
 
     def plot_impulse_time(
-        self, name: str, output_dir: Optional[Union[str, Path]] = None,
-        titulos: Optional[dict] = None,
+        self, name: str, output_dir: str | Path | None = None,
+        titulos: dict | None = None,
     ) -> Path:
         """Gera o gráfico avulso Impulso acumulado × Tempo (N·s).
 
@@ -693,8 +720,8 @@ class motor_analisys:  # pylint: disable=invalid-name
         plt.close()
         return path
     def plot_spline(
-        self, name: str, output_dir: Optional[Union[str, Path]] = None,
-        titulos: Optional[dict] = None,
+        self, name: str, output_dir: str | Path | None = None,
+        titulos: dict | None = None,
     ) -> Path:
         """Gera o gráfico avulso da curva spline/suavizada de empuxo.
 
@@ -792,9 +819,9 @@ class motor_analisys:  # pylint: disable=invalid-name
         return CubicSpline(xi, yi)
 
     def pdf(
-        self, name: str, output_dir: Optional[Union[str, Path]] = None,
-        graficos_dir: Optional[Union[str, Path]] = None,
-        titulos: Optional[dict] = None,
+        self, name: str, output_dir: str | Path | None = None,
+        graficos_dir: str | Path | None = None,
+        titulos: dict | None = None,
     ) -> Path:
         """Gera o relatório PDF do teste estático usando ReportLab.
 
@@ -860,6 +887,10 @@ class motor_analisys:  # pylint: disable=invalid-name
         light_grey = colors.HexColor("#f0f0f4")
 
         pdf_path = output_dir / f"{name}.pdf"
+        # Escrita em arquivo temporário + replace atômico: se o build morrer
+        # no meio, o destino não fica truncado, e arquivos em cache do
+        # OneDrive / abertos em visualizador não quebram a gravação.
+        pdf_tmp = output_dir / f"{name}.pdf.part"
 
         def _header_footer(canvas, doc):
             """Desenha cabeçalho e rodapé em todas as páginas."""
@@ -910,7 +941,7 @@ class motor_analisys:  # pylint: disable=invalid-name
 
         # Configuração do documento
         doc = SimpleDocTemplate(
-            str(pdf_path),
+            str(pdf_tmp),
             pagesize=A4,
             topMargin=34 * mm,
             bottomMargin=18 * mm,
@@ -1067,12 +1098,27 @@ class motor_analisys:  # pylint: disable=invalid-name
         _add_chart(f"{titulos['secao_impulso']}", impulse_path)
         _add_chart(f"{titulos['secao_spline']}", spline_path)
 
-        doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+        try:
+            doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+            _safe_replace(pdf_tmp, pdf_path)
+        except PermissionError as exc:
+            if pdf_tmp.exists():
+                pdf_tmp.unlink()
+            raise RuntimeError(
+                f"Não foi possível gravar '{pdf_path.name}': o arquivo pode estar "
+                "aberto em outro programa (visualizador de PDF, Word ou OneDrive). "
+                "Feche o arquivo e salve novamente — os demais arquivos já foram "
+                "gerados."
+            ) from exc
+        except Exception:
+            if pdf_tmp.exists():
+                pdf_tmp.unlink()
+            raise
         return pdf_path
 
     def save_analisys(
-        self, name: str, output_dir: Optional[Union[str, Path]] = None,
-        titulos: Optional[dict] = None,
+        self, name: str, output_dir: str | Path | None = None,
+        titulos: dict | None = None,
     ) -> None:
         """Salva a análise completa: CSVs, gráficos PNG avulso e relatório PDF.
 
@@ -1114,4 +1160,29 @@ class motor_analisys:  # pylint: disable=invalid-name
         self.plot_force_time(name, graficos_dir, titulos=titulos)
         self.plot_impulse_time(name, graficos_dir, titulos=titulos)
         self.plot_spline(name, graficos_dir, titulos=titulos)
+
+        # Registra as métricas e arquivos no ``motor.json`` quando a gravação
+        # é feita na biblioteca (não na pasta legacy ou em diretório de teste),
+        # para que os cards da biblioteca exibam os reais resultados.
+        from backend.biblioteca import _get_library_dir, update_quality_metadata
+
+        is_library = output_dir.resolve() == (
+            _get_library_dir() / name
+        ).resolve()
+        if is_library:
+            from datetime import UTC
+            from datetime import datetime as _dt
+
+            update_quality_metadata(
+                name,
+                result,
+                csv_original=f"dados/{name}_dados.csv",
+                resultados_csv=f"dados/{name}_resultados.csv",
+                grafico_png=f"graficos/{name}_grafico.png",
+                data_teste=_dt.now(UTC).isoformat(timespec="seconds"),
+            )
+
         self.pdf(name, output_dir, graficos_dir=graficos_dir, titulos=titulos)
+
+        if is_library:
+            update_quality_metadata(name, result, relatorio_pdf=f"{name}.pdf")
