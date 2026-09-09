@@ -139,6 +139,7 @@ def salvar_relatorio() -> str:
         result=result,
         name=name,
         titulos_atuais=titles,
+        titulos_default=dict(DEFAULT_TITULOS),
         titulo_campos=TITULOS_CAMPOS,
         saved=request.args.get("saved") == "1",
     )
@@ -348,6 +349,13 @@ def save_motor() -> str:
         session.pop("motor_data", None)
         return redirect(url_for("page.salvar_relatorio", saved="1"))
     except Exception as exc:  # pylint: disable=broad-except
+        # Limpa os temporários mesmo em caso de erro (evita lixo em data/tmp/)
+        motor_data = session.get("motor_data")
+        if motor_data:
+            for tmp_key in ("tmp_path", "tmp_result_path"):
+                tmp_path = Path(motor_data[tmp_key])
+                if tmp_path.exists():
+                    tmp_path.unlink()
         return render_template(
             "analises.html", msg=f"Erro ao salvar: {str(exc)}", displayopt="block"
         )
@@ -409,10 +417,13 @@ def upload_data() -> str:
         threshold = default_filter_threshold(data_raw)
         data_filtered = data.data_filter(threshold, [time_slider_min, time_slider_max])
 
-        # Armazena na sessão para update_filters e save_treatment
+        # A sessão Flask é limitada a um cookie (~4KB): o DataFrame é serializado
+        # em disco (data/tmp/) e apenas o caminho vai para a sessão.
+        tmp_file = TMP_DIR / f"treatment_{os.urandom(6).hex()}.json"
+        tmp_file.write_text(data_raw.to_json(orient="records"), encoding="utf-8")
         session["treatment_data"] = {
             "filename": uploaded_file.filename,
-            "df_json": data_raw.to_json(orient="records"),
+            "tmp_path": str(tmp_file),
         }
 
         return render_template(
@@ -459,8 +470,13 @@ def save_treatment() -> str:
         import pandas as pd  # import lazy
 
         data = data_treatment.__new__(data_treatment)
-        data.data = pd.read_json(session["treatment_data"]["df_json"], orient="records")
+        data.data = pd.read_json(
+            session["treatment_data"]["tmp_path"], orient="records"
+        )
         saved_path = data.save_treatment(name)
+        tmp_path = Path(session["treatment_data"]["tmp_path"])
+        if tmp_path.exists():
+            tmp_path.unlink()
         session.pop("treatment_data", None)
         return render_template(
             "tratamento.html",
@@ -501,7 +517,9 @@ def update_filters() -> tuple:
         import pandas as pd  # import lazy
 
         data = data_treatment.__new__(data_treatment)
-        data.data = pd.read_json(session["treatment_data"]["df_json"], orient="records")
+        data.data = pd.read_json(
+            session["treatment_data"]["tmp_path"], orient="records"
+        )
 
         data_filtered = data.data_filter(threshold, [tmin, tmax])
         table_info = data.get_stats()
